@@ -1314,6 +1314,8 @@ function Runtime() {
         });
 
         return function (target, data) {
+            if (target.isNull()) 
+                throw new Error("The target protocol is null");
             target = (target instanceof NativePointer) ? new ObjCObject(target) : target;
             data = data || {};
 
