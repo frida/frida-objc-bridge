@@ -684,10 +684,16 @@ function Runtime() {
                 return method;
 
             const tokens = parseMethodName(rawName);
+            const fullName = tokens[2];
+
+            method = cachedMethods[fullName];
+            if (method !== undefined) {
+              return method;
+            }
+
             const kind = tokens[0];
             const name = tokens[1];
             const sel = selector(name);
-            const fullName = tokens[2];
             const defaultKind = isClass() ? '+' : '-';
 
             if (protocol) {
@@ -747,6 +753,7 @@ function Runtime() {
             }
 
             cachedMethods[fullName] = method;
+            cachedMethods[rawName] = method;
             if (kind === defaultKind)
                 cachedMethods[jsMethodName(name)] = method;
 
