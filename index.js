@@ -688,7 +688,8 @@ function Runtime() {
 
             method = cachedMethods[fullName];
             if (method !== undefined) {
-              return method;
+                cachedMethods[rawName] = method;
+                return method;
             }
 
             const kind = tokens[0];
