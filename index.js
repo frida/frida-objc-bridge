@@ -10,7 +10,10 @@ function Runtime() {
     const realizedClasses = new Set([]);
     const classRegistry = new ClassRegistry();
     const protocolRegistry = new ProtocolRegistry();
-    const scheduledCallbacks = [];
+    const scheduledWork = {};
+    let nextId = 1;
+    let workCallback = null;
+    let NSAutoreleasePool = null;
     const bindings = {};
     let readObjectIsa = null;
     const msgSendBySignatureId = {};
@@ -119,32 +122,44 @@ function Runtime() {
     });
 
     this.schedule = function (queue, work) {
-        const NSAutoreleasePool = this.classes.NSAutoreleasePool;
+        const id = ptr(nextId++);
+        scheduledWork[id.toString()] = work;
 
-        const workCallback = new NativeCallback(function () {
-            const pool = NSAutoreleasePool.alloc().init();
-            let pendingException = null;
-            try {
-                work();
-            } catch (e) {
-                pendingException = e;
-            }
-            pool.release();
+        if (workCallback === null) {
+            workCallback = new NativeCallback(performScheduledWorkItem, 'void', ['pointer']);
+        }
 
-            setTimeout(function () {
-                Script.unpin();
-                scheduledCallbacks.splice(scheduledCallbacks.indexOf(workCallback), 1);
-
-                if (pendingException !== null) {
-                    throw pendingException;
-                }
-            }, 0);
-        }, 'void', ['pointer']);
-
-        scheduledCallbacks.push(workCallback);
         Script.pin();
-        api.dispatch_async_f(queue, NULL, workCallback);
+        api.dispatch_async_f(queue, id, workCallback);
     };
+
+    function performScheduledWorkItem(rawId) {
+        const id = rawId.toString();
+        const work = scheduledWork[id];
+        delete scheduledWork[id];
+
+        if (NSAutoreleasePool === null)
+            NSAutoreleasePool = classRegistry.NSAutoreleasePool;
+
+        const pool = NSAutoreleasePool.alloc().init();
+        let pendingException = null;
+        try {
+            work();
+        } catch (e) {
+            pendingException = e;
+        }
+        pool.release();
+
+        setImmediate(performScheduledWorkCleanup, pendingException);
+    }
+
+    function performScheduledWorkCleanup(pendingException) {
+        Script.unpin();
+
+        if (pendingException !== null) {
+            throw pendingException;
+        }
+    }
 
     this.implement = function (method, fn) {
         return new NativeCallback(fn, method.returnType, method.argumentTypes);
