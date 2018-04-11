@@ -2033,8 +2033,14 @@ function Runtime() {
             }
             readUntil('=', cursor);
             const structFields = [];
-            while (peekChar(cursor) !== '}')
+            let ch;
+            while ((ch = peekChar(cursor)) !== '}') {
+                if (ch === '"') {
+                    skipChar(cursor);
+                    readUntil('"', cursor);
+                }
                 structFields.push(readType(cursor));
+            }
             skipChar(cursor); // '}'
             return structType(structFields);
         } else if (id === '(') {
