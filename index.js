@@ -567,6 +567,9 @@ function Runtime() {
                         }
                         return cachedIvars;
                     default:
+                        if (typeof property === "symbol") {
+                            return target[property];
+                        }
                         if (protocol) {
                             const details = findProtocolMethod(property);
                             if (details === null || !details.implemented)
