@@ -4,7 +4,7 @@
   "description": "Objective-C runtime interop from Frida",
   "main": "index.js",
   "files": [
-    "index.js"
+    "/index.js"
   ],
   "browserify": {
     "transform": [
