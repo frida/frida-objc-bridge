@@ -756,7 +756,11 @@ function Runtime() {
                         const forwardingTarget = self.forwardingTargetForSelector_(sel);
                         if (forwardingTarget !== null && forwardingTarget.$kind === 'instance') {
                             target = forwardingTarget;
+                        } else {
+                            return null;
                         }
+                    } else {
+                        return null;
                     }
 
                     if ("- methodSignatureForSelector:" in target) {
