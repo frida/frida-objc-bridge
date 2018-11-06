@@ -763,25 +763,31 @@ function Runtime() {
                         return null;
                     }
 
-                    if ("- methodSignatureForSelector:" in target) {
-                        const s = target.methodSignatureForSelector_(sel);
-                        if (s === null)
-                            return null;
-                        const numArgs = s.numberOfArguments().valueOf();
-                        const frameSize = numArgs * pointerSize;
-                        let types = s.methodReturnType() + frameSize;
-                        for (let i = 0; i !== numArgs; i++) {
-                            const frameOffset = (i * pointerSize);
-                            types += s.getArgumentTypeAtIndex_(i) + frameOffset;
-                        }
-                        method = {
-                            sel: sel,
-                            types: types,
-                            wrapper: null
-                        };
-                    } else {
+                    const methodHandle = api.class_getInstanceMethod(api.object_getClass(target.handle), sel);
+                    if (methodHandle.isNull()) {
                         return null;
                     }
+                    let types = Memory.readUtf8String(api.method_getTypeEncoding(methodHandle));
+                    if (types === null || types === '') {
+                        types = stealTypesFromProtocols(target, fullName);
+                        if (types === null) {
+                            types = stealTypesFromProtocols(self, fullName);
+                        }
+                        if (types === null) {
+                            const numArgs = fullName.split(':').length + 1;
+                            const frameSize = numArgs * pointerSize;
+                            types = `^?${frameSize}@0:${pointerSize}`;
+                            for (let i = 2; i !== numArgs; i++) {
+                                const frameOffset = (i * pointerSize);
+                                types += `^?${frameOffset}`;
+                            }
+                        }
+                    }
+                    method = {
+                        sel,
+                        types,
+                        wrapper: null
+                    };
                 }
             }
 
@@ -791,6 +797,31 @@ function Runtime() {
                 cachedMethods[jsMethodName(name)] = method;
 
             return method;
+        }
+
+        function stealTypesFromProtocols(klass, fullName) {
+            const candidates = Object.keys(klass.$protocols)
+                .map(protocolName => flatProtocolMethods({}, klass.$protocols[protocolName]))
+                .reduce((allMethods, methods) => {
+                    Object.assign(allMethods, methods);
+                    return allMethods;
+                }, {});
+
+            const method = candidates[fullName];
+            if (method === undefined) {
+                return null;
+            }
+            return method.types;
+        }
+
+        function flatProtocolMethods(result, protocol) {
+            if (protocol.methods !== undefined) {
+                Object.assign(result, protocol.methods);
+            }
+            if (protocol.protocol !== undefined) {
+                flatProtocolMethods(result, protocol.protocol);
+            }
+            return result;
         }
 
         function findProtocolMethod(rawName) {
@@ -878,7 +909,7 @@ function Runtime() {
                 kind = match[1];
                 name = match[2];
             }
-            const fullName = kind + name;
+            const fullName = [kind, name].join(' ');
             return [kind, name, fullName];
         }
 
