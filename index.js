@@ -807,7 +807,7 @@ function Runtime() {
                     return allMethods;
                 }, {});
 
-            const method = candidates[fullName.replace('-', '- ')];
+            const method = candidates[fullName];
             if (method === undefined) {
                 return null;
             }
@@ -909,7 +909,7 @@ function Runtime() {
                 kind = match[1];
                 name = match[2];
             }
-            const fullName = kind + name;
+            const fullName = kind + ' ' + name;
             return [kind, name, fullName];
         }
 
