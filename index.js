@@ -768,20 +768,12 @@ function Runtime() {
                         return null;
                     }
                     let types = Memory.readUtf8String(api.method_getTypeEncoding(methodHandle));
-                    if (types === null || types === '') {
+                    if (types === null || types === "") {
                         types = stealTypesFromProtocols(target, fullName);
-                        if (types === null) {
+                        if (types === null)
                             types = stealTypesFromProtocols(self, fullName);
-                        }
-                        if (types === null) {
-                            const numArgs = fullName.split(':').length + 1;
-                            const frameSize = numArgs * pointerSize;
-                            types = `^?${frameSize}@0:${pointerSize}`;
-                            for (let i = 2; i !== numArgs; i++) {
-                                const frameOffset = (i * pointerSize);
-                                types += `^?${frameOffset}`;
-                            }
-                        }
+                        if (types === null)
+                            return null;
                     }
                     method = {
                         sel,
