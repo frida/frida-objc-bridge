@@ -909,7 +909,7 @@ function Runtime() {
                 kind = match[1];
                 name = match[2];
             }
-            const fullName = kind + ' ' + name;
+            const fullName = [kind, name].join(' ');
             return [kind, name, fullName];
         }
 
