@@ -2318,27 +2318,25 @@ function Runtime() {
             toNative = identityTransform;
         }
 
+        const [totalSize, fieldOffsets] = fieldTypes.reduce(function (result, t) {
+            const [previousOffset, offsets] = result;
+
+            const {size} = t;
+            const offset = align(previousOffset, size);
+            offsets.push(offset);
+
+            return [offset + size, offsets];
+        }, [0, []]);
+
         return {
-            type: fieldTypes.map(function (t) {
-                return t.type;
-            }),
-            size: fieldTypes.reduce(function (totalSize, t) {
-                return totalSize + t.size;
-            }, 0),
+            type: fieldTypes.map(t => t.type),
+            size: totalSize,
             read: function (address) {
-                let source = address;
-                return fieldTypes.map((type, index) => {
-                    const result = type.read(source);
-                    source = source.add(type.size);
-                    return result;
-                });
+                return fieldTypes.map((type, index) => type.read(address.add(fieldOffsets[index])));
             },
             write: function (address, values) {
-                let target = address;
                 values.forEach((value, index) => {
-                    const type = fieldTypes[index];
-                    type.write(target, value);
-                    target = target.add(type.size);
+                    fieldTypes[index].write(address.add(fieldOffsets[index]), value);
                 });
             },
             fromNative: fromNative,
@@ -2544,6 +2542,11 @@ function Runtime() {
 
     function identityTransform(v) {
         return v;
+    }
+
+    function align(value, boundary) {
+        const remainder = value % boundary;
+        return (remainder === 0) ? value : value + (boundary - remainder);
     }
 }
 
