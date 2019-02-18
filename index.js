@@ -101,6 +101,16 @@ function Runtime() {
         value: getBoundData
     });
 
+    Object.defineProperty(this, 'enumerateLoadedClasses', {
+        enumerable: true,
+        value: enumerateLoadedClasses
+    });
+
+    Object.defineProperty(this, 'enumerateLoadedClassesSync', {
+        enumerable: true,
+        value: enumerateLoadedClassesSync
+    });
+
     Object.defineProperty(this, 'choose', {
         enumerable: true,
         value: choose
@@ -1583,6 +1593,60 @@ function Runtime() {
             bindings[key] = binding;
         }
         return binding;
+    }
+
+    function enumerateLoadedClasses(...args) {
+        let callbacks;
+        let modules;
+        if (args.length === 1) {
+            callbacks = args[0];
+        } else {
+            callbacks = args[1];
+
+            const options = args[0];
+            modules = options.ownedBy;
+        }
+        if (modules === undefined)
+            modules = new ModuleMap();
+
+        const readPointer = Memory.readPointer.bind(Memory);
+        const readUtf8String = Memory.readUtf8String.bind(Memory);
+        const classGetName = api.class_getName;
+        const findPath = modules.findPath.bind(modules);
+        const onMatch = callbacks.onMatch.bind(callbacks);
+
+        const numClasses = api.objc_getClassList(NULL, 0);
+        const classHandles = Memory.alloc(numClasses * pointerSize);
+        api.objc_getClassList(classHandles, numClasses);
+
+        for (let i = 0; i !== numClasses; i++) {
+            const handle = readPointer(classHandles.add(i * pointerSize));
+            const rawName = classGetName(handle);
+            const modulePath = findPath(rawName);
+            if (modulePath !== null) {
+                const name = readUtf8String(rawName);
+                onMatch(name, modulePath);
+            }
+        }
+
+        callbacks.onComplete();
+    }
+
+    function enumerateLoadedClassesSync(options = {}) {
+        const result = {};
+        enumerateLoadedClasses(options, {
+            onMatch(name, owner) {
+                let group = result[owner];
+                if (group === undefined) {
+                    group = [];
+                    result[owner] = group;
+                }
+                group.push(name);
+            },
+            onComplete() {
+            }
+        });
+        return result;
     }
 
     function choose(specifier, callbacks) {
