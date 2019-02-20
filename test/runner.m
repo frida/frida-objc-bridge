@@ -10,8 +10,8 @@
 static gchar * load_bundle (void);
 
 static gchar * detect_runner_location (void);
-static gboolean frida_store_path_of_test_runner (
-    const GumModuleDetails * details, gpointer user_data);
+static gboolean store_path_of_test_runner (const GumModuleDetails * details,
+    gpointer user_data);
 
 gchar * frida_objc_bundle = NULL;
 guint num_tests_run = 0;
@@ -105,15 +105,15 @@ detect_runner_location (void)
 {
   gchar * location = NULL;
 
-  gum_process_enumerate_modules (frida_store_path_of_test_runner, &location);
+  gum_process_enumerate_modules (store_path_of_test_runner, &location);
   g_assert (location != NULL);
 
   return location;
 }
 
 static gboolean
-frida_store_path_of_test_runner (const GumModuleDetails * details,
-                                 gpointer user_data)
+store_path_of_test_runner (const GumModuleDetails * details,
+                           gpointer user_data)
 {
   gchar ** path = user_data;
 
