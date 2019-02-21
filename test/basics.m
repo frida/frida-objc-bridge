@@ -7,7 +7,7 @@
 #define SUITE "/Basics"
 #include "fixture.m"
 
-TEST_LIST_BEGIN (basics)
+TESTLIST_BEGIN (basics)
   TESTENTRY (classes_can_be_enumerated)
   TESTENTRY (object_enumeration_should_contain_parent_methods)
   TESTENTRY (object_enumeration_should_contain_protocol_methods)
@@ -26,9 +26,13 @@ TEST_LIST_BEGIN (basics)
   TESTENTRY (string_can_be_constructed)
   TESTENTRY (string_can_be_passed_as_argument)
   TESTENTRY (class_can_be_implemented)
-  TESTENTRY (block_can_be_implemented)
-  TESTENTRY (block_can_be_invoked)
-  TESTENTRY (block_can_be_migrated_to_the_heap_behind_our_back)
+
+  TESTGROUP_BEGIN ("Block")
+    TESTENTRY (block_can_be_implemented)
+    TESTENTRY (block_can_be_invoked)
+    TESTENTRY (block_can_be_migrated_to_the_heap_behind_our_back)
+  TESTGROUP_END ()
+
   TESTENTRY (basic_method_implementation_can_be_overridden)
   TESTENTRY (struct_consuming_method_implementation_can_be_overridden)
   TESTENTRY (struct_returning_method_can_be_called)
@@ -39,10 +43,10 @@ TEST_LIST_BEGIN (basics)
   TESTENTRY (methods_with_weird_names_can_be_invoked)
   TESTENTRY (method_call_preserves_value)
   TESTENTRY (objects_can_be_serialized_to_json)
-  TESTENTRY (objects_can_be_chosen)
+  TESTENTRY (existing_instances_can_be_discovered)
   TESTENTRY (function_can_be_scheduled_on_a_dispatch_queue)
   TESTENTRY (performance)
-TEST_LIST_END ()
+TESTLIST_END ()
 
 @protocol FridaCalculator
 - (int)add:(int)value;
@@ -52,7 +56,8 @@ TEST_LIST_END ()
 - (int)magic;
 @end
 
-@interface FridaDefaultCalculator : NSObject<FridaCalculator> {
+@interface FridaDefaultCalculator : NSObject<FridaCalculator>
+{
   NSString * name;
 }
 @end
@@ -784,7 +789,7 @@ TESTCASE (objects_can_be_serialized_to_json)
 @implementation FridaTest4
 @end
 
-TESTCASE (objects_can_be_chosen)
+TESTCASE (existing_instances_can_be_discovered)
 {
   if (!g_test_slow ())
   {
