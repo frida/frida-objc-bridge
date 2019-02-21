@@ -47,6 +47,7 @@ TESTLIST_BEGIN (basics)
   TESTGROUP_BEGIN ("EnumerateLoadedClasses")
     TESTENTRY (classes_can_be_enumerated_without_filtering)
     TESTENTRY (classes_can_be_enumerated_with_filtering)
+    TESTENTRY (swift_classes_can_be_enumerated)
   TESTGROUP_END ()
 
   TESTENTRY (existing_instances_can_be_discovered)
@@ -825,6 +826,16 @@ TESTCASE (classes_can_be_enumerated_with_filtering)
       "send(owners.length === 1);"
       "send(owners[0] === runnerPath);");
   EXPECT_SEND_MESSAGE_WITH ("true");
+  EXPECT_SEND_MESSAGE_WITH ("true");
+  EXPECT_NO_MESSAGES ();
+}
+
+TESTCASE (swift_classes_can_be_enumerated)
+{
+  COMPILE_AND_LOAD_SCRIPT (
+      "var classes = ObjC.enumerateLoadedClassesSync();"
+      "var runnerPath = Process.enumerateModulesSync()[0].path;"
+      "send(classes[runnerPath].indexOf('FridaObjCTests.Taylor') !== -1)");
   EXPECT_SEND_MESSAGE_WITH ("true");
   EXPECT_NO_MESSAGES ();
 }

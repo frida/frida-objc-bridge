@@ -1596,6 +1596,9 @@ function Runtime() {
     }
 
     function enumerateLoadedClasses(...args) {
+        const allModules = new ModuleMap();
+        let unfiltered = false;
+
         let callbacks;
         let modules;
         if (args.length === 1) {
@@ -1606,25 +1609,41 @@ function Runtime() {
             const options = args[0];
             modules = options.ownedBy;
         }
-        if (modules === undefined)
-            modules = new ModuleMap();
+        if (modules === undefined) {
+            modules = allModules;
+            unfiltered = true;
+        }
 
         const readPointer = Memory.readPointer.bind(Memory);
         const readUtf8String = Memory.readUtf8String.bind(Memory);
         const classGetName = api.class_getName;
-        const findPath = modules.findPath.bind(modules);
         const onMatch = callbacks.onMatch.bind(callbacks);
+        const swiftNominalTypeDescriptorOffset = ((pointerSize === 8) ? 8 : 11) * pointerSize;
 
         const numClasses = api.objc_getClassList(NULL, 0);
         const classHandles = Memory.alloc(numClasses * pointerSize);
         api.objc_getClassList(classHandles, numClasses);
 
         for (let i = 0; i !== numClasses; i++) {
-            const handle = readPointer(classHandles.add(i * pointerSize));
-            const rawName = classGetName(handle);
-            const modulePath = findPath(rawName);
+            const classHandle = readPointer(classHandles.add(i * pointerSize));
+
+            const rawName = classGetName(classHandle);
+            let name = null;
+
+            let modulePath = modules.findPath(rawName);
+            const possiblySwift = (modulePath === null) && (unfiltered || allModules.findPath(rawName) === null);
+            if (possiblySwift) {
+                name = readUtf8String(rawName);
+                const probablySwift = name.indexOf('.') !== -1;
+                if (probablySwift) {
+                    const nominalTypeDescriptor = Memory.readPointer(classHandle.add(swiftNominalTypeDescriptorOffset));
+                    modulePath = modules.findPath(nominalTypeDescriptor);
+                }
+            }
+
             if (modulePath !== null) {
-                const name = readUtf8String(rawName);
+                if (name === null)
+                    name = readUtf8String(rawName);
                 onMatch(name, modulePath);
             }
         }
