@@ -22,7 +22,6 @@ main (int argc, char * argv[])
   gint result;
   GumExceptor * exceptor;
   GumScriptBackend * v8_backend = NULL;
-  GTimer * timer;
   gdouble t;
 
   gum_init_embedded ();
@@ -56,10 +55,15 @@ main (int argc, char * argv[])
 
   RUN_SUITE (basics);
 
-  timer = g_timer_new ();
-  result = g_test_run ();
-  t = g_timer_elapsed (timer, NULL);
-  g_timer_destroy (timer);
+  @autoreleasepool
+  {
+    GTimer * timer = g_timer_new ();
+
+    result = g_test_run ();
+
+    t = g_timer_elapsed (timer, NULL);
+    g_timer_destroy (timer);
+  }
 
   g_print ("\nRan %d test%s in %.2f seconds\n",
       num_tests_run,
