@@ -4,6 +4,10 @@
 
 let cachedObjCApi = {};
 
+const nativeFunctionOptions = {
+    exceptions: 'propagate'
+};
+
 function Runtime() {
     const pointerSize = Process.pointerSize;
     const api = getApi();
@@ -1320,7 +1324,8 @@ function Runtime() {
             return makeBlockInvocationWrapper(this, signature, new NativeFunction(
                 address,
                 signature.retType.type,
-                signature.argTypes.map(function (arg) { return arg.type; })));
+                signature.argTypes.map(function (arg) { return arg.type; }),
+                nativeFunctionOptions));
         },
         set: function (func) {
             const priv = this[PRIV];
@@ -1775,7 +1780,7 @@ function Runtime() {
             get: function () {
                 const h = getMethodHandle();
 
-                return new NativeFunction(api.method_getImplementation(h), m.returnType, m.argumentTypes);
+                return new NativeFunction(api.method_getImplementation(h), m.returnType, m.argumentTypes, nativeFunctionOptions);
             },
             set: function (imp) {
                 const h = getMethodHandle();
@@ -2030,7 +2035,7 @@ function Runtime() {
 
             const name = components.join('');
 
-            impl = new NativeFunction(api[name], retType, argTypes);
+            impl = new NativeFunction(api[name], retType, argTypes, nativeFunctionOptions);
             cache[signature.id] = impl;
         }
 
@@ -2753,7 +2758,7 @@ function getApi() {
                     if (isObjCApi)
                         signature.call(cachedObjCApi, exp.address);
                 } else {
-                    temporaryApi[name] = new NativeFunction(exp.address, signature[0], signature[1]);
+                    temporaryApi[name] = new NativeFunction(exp.address, signature[0], signature[1], nativeFunctionOptions);
                     if (isObjCApi)
                         cachedObjCApi[name] = temporaryApi[name];
                 }
