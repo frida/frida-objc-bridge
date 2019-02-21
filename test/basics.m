@@ -43,6 +43,12 @@ TESTLIST_BEGIN (basics)
   TESTENTRY (methods_with_weird_names_can_be_invoked)
   TESTENTRY (method_call_preserves_value)
   TESTENTRY (objects_can_be_serialized_to_json)
+
+  TESTGROUP_BEGIN ("EnumerateLoadedClasses")
+    TESTENTRY (classes_can_be_enumerated_without_filtering)
+    TESTENTRY (classes_can_be_enumerated_with_filtering)
+  TESTGROUP_END ()
+
   TESTENTRY (existing_instances_can_be_discovered)
   TESTENTRY (function_can_be_scheduled_on_a_dispatch_queue)
   TESTENTRY (performance)
@@ -788,6 +794,40 @@ TESTCASE (objects_can_be_serialized_to_json)
 @end
 @implementation FridaTest4
 @end
+
+TESTCASE (classes_can_be_enumerated_without_filtering)
+{
+  COMPILE_AND_LOAD_SCRIPT (
+      "var classes = ObjC.enumerateLoadedClassesSync();"
+      "var owners = Object.keys(classes);"
+      "send(owners.length > 1);"
+      "var runnerPath = Process.enumerateModulesSync()[0].path;"
+      "send(classes[runnerPath] !== undefined);"
+      "send(classes[runnerPath].indexOf('FridaTest3') !== -1)");
+  EXPECT_SEND_MESSAGE_WITH ("true");
+  EXPECT_SEND_MESSAGE_WITH ("true");
+  EXPECT_SEND_MESSAGE_WITH ("true");
+  EXPECT_NO_MESSAGES ();
+}
+
+TESTCASE (classes_can_be_enumerated_with_filtering)
+{
+  COMPILE_AND_LOAD_SCRIPT (
+      "var runnerPath = Process.enumerateModulesSync()[0].path;"
+      "var runnerModules = new ModuleMap(isRunnerModule);"
+      "function isRunnerModule(m) {"
+          "return m.path === runnerPath;"
+      "}"
+      "var classes = ObjC.enumerateLoadedClassesSync({"
+          "ownedBy: runnerModules"
+      "});"
+      "var owners = Object.keys(classes);"
+      "send(owners.length === 1);"
+      "send(owners[0] === runnerPath);");
+  EXPECT_SEND_MESSAGE_WITH ("true");
+  EXPECT_SEND_MESSAGE_WITH ("true");
+  EXPECT_NO_MESSAGES ();
+}
 
 TESTCASE (existing_instances_can_be_discovered)
 {
