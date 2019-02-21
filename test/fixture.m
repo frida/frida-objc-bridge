@@ -92,6 +92,7 @@ struct _TestMessageItem
 };
 
 static void test_message_item_free (TestMessageItem * item);
+static gboolean test_fixture_try_handle_log_message (const gchar * raw_message);
 static TestMessageItem * test_fixture_try_pop_message (TestFixture * fixture,
     guint timeout);
 static gboolean test_fixture_stop_loop (TestFixture * fixture);
@@ -174,6 +175,9 @@ test_fixture_store_message (GumScript * script,
   TestFixture * self = (TestFixture *) user_data;
   TestMessageItem * item;
 
+  if (test_fixture_try_handle_log_message (message))
+    return;
+
   item = g_slice_new (TestMessageItem);
   item->message = g_strdup (message);
 
@@ -204,6 +208,56 @@ test_fixture_store_message (GumScript * script,
 
   g_queue_push_tail (&self->messages, item);
   g_main_loop_quit (self->loop);
+}
+
+static gboolean
+test_fixture_try_handle_log_message (const gchar * raw_message)
+{
+  gboolean handled = FALSE;
+  JsonNode * message;
+  JsonReader * reader;
+  const gchar * text;
+  const gchar * level;
+  guint color;
+
+  message = json_from_string (raw_message, NULL);
+  reader = json_reader_new (message);
+  json_node_unref (message);
+
+  json_reader_read_member (reader, "type");
+  if (strcmp (json_reader_get_string_value (reader), "log") != 0)
+    goto beach;
+  json_reader_end_member (reader);
+
+  json_reader_read_member (reader, "payload");
+  text = json_reader_get_string_value (reader);
+  json_reader_end_member (reader);
+
+  json_reader_read_member (reader, "level");
+  level = json_reader_get_string_value (reader);
+  json_reader_end_member (reader);
+  if (strcmp (level, "info") == 0)
+    color = 36;
+  else if (strcmp (level, "warning") == 0)
+    color = 33;
+  else if (strcmp (level, "error") == 0)
+    color = 31;
+  else
+    g_assert_not_reached ();
+
+  g_printerr (
+      "\033[0;%um"
+      "%s"
+      "\033[0m"
+      "\n",
+      color, text);
+
+  handled = TRUE;
+
+beach:
+  g_object_unref (reader);
+
+  return handled;
 }
 
 static void
