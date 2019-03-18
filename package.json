@@ -1,6 +1,6 @@
 {
   "name": "frida-objc",
-  "version": "3.1.1",
+  "version": "3.1.2",
   "description": "Objective-C runtime interop from Frida",
   "main": "index.js",
   "files": [
