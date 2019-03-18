@@ -188,7 +188,7 @@ function Runtime() {
     }
 
     function selectorAsString(sel) {
-        return Memory.readUtf8String(api.sel_getName(sel));
+        return api.sel_getName(sel).readUtf8String();
     }
 
     const registryBuiltins = new Set([
@@ -238,8 +238,8 @@ function Runtime() {
                     const classHandles = Memory.alloc(numClasses * pointerSize);
                     numClasses = api.objc_getClassList(classHandles, numClasses);
                     for (let i = 0; i !== numClasses; i++) {
-                        const handle = Memory.readPointer(classHandles.add(i * pointerSize));
-                        const name = Memory.readUtf8String(api.class_getName(handle));
+                        const handle = classHandles.add(i * pointerSize).readPointer();
+                        const name = api.class_getName(handle).readUtf8String();
                         cachedClasses[name] = handle;
 
                         // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
@@ -333,10 +333,10 @@ function Runtime() {
                 const numProtocolsBuf = Memory.alloc(pointerSize);
                 const protocolHandles = api.objc_copyProtocolList(numProtocolsBuf);
                 try {
-                    const numProtocols = Memory.readUInt(numProtocolsBuf);
+                    const numProtocols = numProtocolsBuf.readUInt();
                     for (let i = 0; i !== numProtocols; i++) {
-                        const handle = Memory.readPointer(protocolHandles.add(i * pointerSize));
-                        const name = Memory.readUtf8String(api.protocol_getName(handle));
+                        const handle = protocolHandles.add(i * pointerSize).readPointer();
+                        const name = api.protocol_getName(handle).readUtf8String();
 
                         protocolNames.push(name);
                         cachedProtocols[name] = handle;
@@ -486,8 +486,8 @@ function Runtime() {
                             const superHandle = api.class_getSuperclass(classHandle());
                             if (!superHandle.isNull()) {
                                 const specifier = Memory.alloc(2 * pointerSize);
-                                Memory.writePointer(specifier, handle);
-                                Memory.writePointer(specifier.add(pointerSize), superHandle);
+                                specifier.writePointer(handle);
+                                specifier.add(pointerSize).writePointer(superHandle);
                                 cachedSuper = [new ObjCObject(handle, undefined, cachedIsClass, specifier)];
                             } else {
                                 cachedSuper = [null];
@@ -511,11 +511,11 @@ function Runtime() {
                     case "$className":
                         if (cachedClassName === null) {
                             if (superSpecifier)
-                                cachedClassName = Memory.readUtf8String(api.class_getName(Memory.readPointer(superSpecifier.add(pointerSize))));
+                                cachedClassName = api.class_getName(superSpecifier.add(pointerSize).readPointer()).readUtf8String();
                             else if (isClass())
-                                cachedClassName = Memory.readUtf8String(api.class_getName(handle));
+                                cachedClassName = api.class_getName(handle).readUtf8String();
                             else
-                                cachedClassName = Memory.readUtf8String(api.object_getClassName(handle));
+                                cachedClassName = api.object_getClassName(handle).readUtf8String();
                         }
                         return cachedClassName;
                     case "$protocols":
@@ -525,9 +525,9 @@ function Runtime() {
                             const protocolHandles = api.class_copyProtocolList(classHandle(), numProtocolsBuf);
                             if (!protocolHandles.isNull()) {
                                 try {
-                                    const numProtocols = Memory.readUInt(numProtocolsBuf);
+                                    const numProtocols = numProtocolsBuf.readUInt();
                                     for (let i = 0; i !== numProtocols; i++) {
-                                        const protocolHandle = Memory.readPointer(protocolHandles.add(i * pointerSize));
+                                        const protocolHandle = protocolHandles.add(i * pointerSize).readPointer();
                                         const p = new ObjCProtocol(protocolHandle);
                                         cachedProtocols[p.name] = p;
                                     }
@@ -539,7 +539,7 @@ function Runtime() {
                         return cachedProtocols;
                     case "$methods":
                         if (cachedNativeMethodNames === null) {
-                            const klass = superSpecifier ? Memory.readPointer(superSpecifier.add(pointerSize)) : classHandle();
+                            const klass = superSpecifier ? superSpecifier.add(pointerSize).readPointer() : classHandle();
                             const meta = api.object_getClass(klass);
 
                             const names = new Set();
@@ -563,7 +563,7 @@ function Runtime() {
                         return cachedNativeMethodNames;
                     case "$ownMethods":
                         if (cachedOwnMethodNames === null) {
-                            const klass = superSpecifier ? Memory.readPointer(superSpecifier.add(pointerSize)) : classHandle();
+                            const klass = superSpecifier ? superSpecifier.add(pointerSize).readPointer() : classHandle();
                             const meta = api.object_getClass(klass);
 
                             const classMethods = collectMethodNames(meta, "+ ");
@@ -610,11 +610,11 @@ function Runtime() {
                             const methodHandles = api.class_copyMethodList(cur, numMethodsBuf);
                             const fullNamePrefix = isClass() ? "+ " : "- ";
                             try {
-                                const numMethods = Memory.readUInt(numMethodsBuf);
+                                const numMethods = numMethodsBuf.readUInt();
                                 for (let i = 0; i !== numMethods; i++) {
-                                    const methodHandle = Memory.readPointer(methodHandles.add(i * pointerSize));
+                                    const methodHandle = methodHandles.add(i * pointerSize).readPointer();
                                     const sel = api.method_getName(methodHandle);
-                                    const nativeName = Memory.readUtf8String(api.sel_getName(sel));
+                                    const nativeName = api.sel_getName(sel).readUtf8String();
                                     if (nativeNames[nativeName] !== undefined)
                                         continue;
                                     nativeNames[nativeName] = nativeName;
@@ -781,7 +781,7 @@ function Runtime() {
                     if (methodHandle.isNull()) {
                         return null;
                     }
-                    let types = Memory.readUtf8String(api.method_getTypeEncoding(methodHandle));
+                    let types = api.method_getTypeEncoding(methodHandle).readUtf8String();
                     if (types === null || types === "") {
                         types = stealTypesFromProtocols(target, fullName);
                         if (types === null)
@@ -936,11 +936,11 @@ function Runtime() {
         const numMethodsBuf = Memory.alloc(pointerSize);
         const methodHandles = api.class_copyMethodList(klass, numMethodsBuf);
         try {
-            const numMethods = Memory.readUInt(numMethodsBuf);
+            const numMethods = numMethodsBuf.readUInt();
             for (let i = 0; i !== numMethods; i++) {
-                const methodHandle = Memory.readPointer(methodHandles.add(i * pointerSize));
+                const methodHandle = methodHandles.add(i * pointerSize).readPointer();
                 const sel = api.method_getName(methodHandle);
-                const nativeName = Memory.readUtf8String(api.sel_getName(sel));
+                const nativeName = api.sel_getName(sel).readUtf8String();
                 names.push(prefix + nativeName);
             }
         } finally {
@@ -964,7 +964,7 @@ function Runtime() {
         Object.defineProperty(this, 'name', {
             get: function () {
                 if (cachedName === null)
-                    cachedName = Memory.readUtf8String(api.protocol_getName(handle));
+                    cachedName = api.protocol_getName(handle).readUtf8String();
                 return cachedName;
             },
             enumerable: true
@@ -978,9 +978,9 @@ function Runtime() {
                     const protocolHandles = api.protocol_copyProtocolList(handle, numProtocolsBuf);
                     if (!protocolHandles.isNull()) {
                         try {
-                            const numProtocols = Memory.readUInt(numProtocolsBuf);
+                            const numProtocols = numProtocolsBuf.readUInt();
                             for (let i = 0; i !== numProtocols; i++) {
-                                const protocolHandle = Memory.readPointer(protocolHandles.add(i * pointerSize));
+                                const protocolHandle = protocolHandles.add(i * pointerSize).readPointer();
                                 const protocol = new ObjCProtocol(protocolHandle);
                                 cachedProtocols[protocol.name] = protocol;
                             }
@@ -1002,19 +1002,19 @@ function Runtime() {
                     const propertyHandles = api.protocol_copyPropertyList(handle, numBuf);
                     if (!propertyHandles.isNull()) {
                         try {
-                            const numProperties = Memory.readUInt(numBuf);
+                            const numProperties = numBuf.readUInt();
                             for (let i = 0; i !== numProperties; i++) {
-                                const propertyHandle = Memory.readPointer(propertyHandles.add(i * pointerSize));
-                                const propName = Memory.readUtf8String(api.property_getName(propertyHandle));
+                                const propertyHandle = propertyHandles.add(i * pointerSize).readPointer();
+                                const propName = api.property_getName(propertyHandle).readUtf8String();
                                 const attributes = {};
                                 const attributeEntries = api.property_copyAttributeList(propertyHandle, numBuf);
                                 if (!attributeEntries.isNull()) {
                                     try {
-                                        const numAttributeValues = Memory.readUInt(numBuf);
+                                        const numAttributeValues = numBuf.readUInt();
                                         for (let j = 0; j !== numAttributeValues; j++) {
                                             const attributeEntry = attributeEntries.add(j * (2 * pointerSize));
-                                            const name = Memory.readUtf8String(Memory.readPointer(attributeEntry));
-                                            const value = Memory.readUtf8String(Memory.readPointer(attributeEntry.add(pointerSize)));
+                                            const name = attributeEntry.readPointer().readUtf8String();
+                                            const value = attributeEntry.add(pointerSize).readPointer().readUtf8String();
                                             attributes[name] = value;
                                         }
                                     } finally {
@@ -1053,11 +1053,11 @@ function Runtime() {
             if (methodDescValues.isNull())
                 return;
             try {
-                const numMethodDescValues = Memory.readUInt(numBuf);
+                const numMethodDescValues = numBuf.readUInt();
                 for (let i = 0; i !== numMethodDescValues; i++) {
                     const methodDesc = methodDescValues.add(i * (2 * pointerSize));
-                    const name = (spec.instance ? '- ' : '+ ') + selectorAsString(Memory.readPointer(methodDesc));
-                    const types = Memory.readUtf8String(Memory.readPointer(methodDesc.add(pointerSize)));
+                    const name = (spec.instance ? '- ' : '+ ') + selectorAsString(methodDesc.readPointer());
+                    const types = methodDesc.add(pointerSize).readPointer().readUtf8String();
                     methods[name] = {
                         required: spec.required,
                         types: types
@@ -1094,10 +1094,10 @@ function Runtime() {
         classHandles.forEach(c => {
             const ivarHandles = api.class_copyIvarList(c, numIvarsBuf);
             try {
-                const numIvars = Memory.readUInt(numIvarsBuf);
+                const numIvars = numIvarsBuf.readUInt();
                 for (let i = 0; i !== numIvars; i++) {
-                    const handle = Memory.readPointer(ivarHandles.add(i * pointerSize));
-                    const name = Memory.readUtf8String(api.ivar_getName(handle));
+                    const handle = ivarHandles.add(i * pointerSize).readPointer();
+                    const name = api.ivar_getName(handle).readUtf8String();
                     ivars[name] = [handle, null];
                 }
             } finally {
@@ -1170,7 +1170,7 @@ function Runtime() {
                 const offset = api.ivar_getOffset(ivar).toInt32();
                 const address = instance.handle.add(offset);
 
-                const type = parseType(Memory.readUtf8String(api.ivar_getTypeEncoding(ivar)));
+                const type = parseType(api.ivar_getTypeEncoding(ivar).readUtf8String());
                 const fromNative = type.fromNative || identityTransform;
                 const toNative = type.toNative || identityTransform;
 
@@ -1269,14 +1269,14 @@ function Runtime() {
         this[PRIV] = priv;
 
         if (target instanceof NativePointer) {
-            const descriptor = Memory.readPointer(target.add(blockOffsets.descriptor));
+            const descriptor = target.add(blockOffsets.descriptor).readPointer();
 
             this.handle = target;
 
-            const flags = Memory.readU32(target.add(blockOffsets.flags));
+            const flags = target.add(blockOffsets.flags).readU32();
             if ((flags & BLOCK_HAS_SIGNATURE) !== 0) {
                 const signatureOffset = ((flags & BLOCK_HAS_COPY_DISPOSE) !== 0) ? 2 : 0;
-                this.types = Memory.readCString(Memory.readPointer(descriptor.add(blockDescriptorOffsets.rest + (signatureOffset * pointerSize))));
+                this.types = descriptor.add(blockDescriptorOffsets.rest + (signatureOffset * pointerSize)).readPointer().readCString();
                 priv.signature = parseSignature(this.types);
             }
         } else {
@@ -1295,14 +1295,14 @@ function Runtime() {
             const block = descriptor.add(blockDescriptorAllocSize);
             const typesStr = Memory.allocUtf8String(types);
 
-            Memory.writeULong(descriptor.add(blockDescriptorOffsets.reserved), 0);
-            Memory.writeULong(descriptor.add(blockDescriptorOffsets.size), blockDescriptorDeclaredSize);
-            Memory.writePointer(descriptor.add(blockDescriptorOffsets.rest), typesStr);
+            descriptor.add(blockDescriptorOffsets.reserved).writeULong(0);
+            descriptor.add(blockDescriptorOffsets.size).writeULong(blockDescriptorDeclaredSize);
+            descriptor.add(blockDescriptorOffsets.rest).writePointer(typesStr);
 
-            Memory.writePointer(block.add(blockOffsets.isa), classRegistry.__NSGlobalBlock__);
-            Memory.writeU32(block.add(blockOffsets.flags), BLOCK_HAS_SIGNATURE | BLOCK_IS_GLOBAL);
-            Memory.writeU32(block.add(blockOffsets.reserved), 0);
-            Memory.writePointer(block.add(blockOffsets.descriptor), descriptor);
+            block.add(blockOffsets.isa).writePointer(classRegistry.__NSGlobalBlock__);
+            block.add(blockOffsets.flags).writeU32(BLOCK_HAS_SIGNATURE | BLOCK_IS_GLOBAL);
+            block.add(blockOffsets.reserved).writeU32(0);
+            block.add(blockOffsets.descriptor).writePointer(descriptor);
 
             this.handle = block;
 
@@ -1319,7 +1319,7 @@ function Runtime() {
         enumerable: true,
         get: function () {
             const priv = this[PRIV];
-            const address = Memory.readPointer(this.handle.add(blockOffsets.invoke));
+            const address = this.handle.add(blockOffsets.invoke).readPointer();
             const signature = priv.signature;
             return makeBlockInvocationWrapper(this, signature, new NativeFunction(
                 address,
@@ -1334,7 +1334,7 @@ function Runtime() {
                 makeBlockImplementationWrapper(this, signature, func),
                 signature.retType.type,
                 signature.argTypes.map(function (arg) { return arg.type; }));
-            Memory.writePointer(this.handle.add(blockOffsets.invoke), priv.callback);
+            this.handle.add(blockOffsets.invoke).writePointer(priv.callback);
         }
     });
 
@@ -1619,8 +1619,6 @@ function Runtime() {
             unfiltered = true;
         }
 
-        const readPointer = Memory.readPointer.bind(Memory);
-        const readUtf8String = Memory.readUtf8String.bind(Memory);
         const classGetName = api.class_getName;
         const onMatch = callbacks.onMatch.bind(callbacks);
         const swiftNominalTypeDescriptorOffset = ((pointerSize === 8) ? 8 : 11) * pointerSize;
@@ -1630,7 +1628,7 @@ function Runtime() {
         api.objc_getClassList(classHandles, numClasses);
 
         for (let i = 0; i !== numClasses; i++) {
-            const classHandle = readPointer(classHandles.add(i * pointerSize));
+            const classHandle = classHandles.add(i * pointerSize).readPointer();
 
             const rawName = classGetName(classHandle);
             let name = null;
@@ -1638,17 +1636,17 @@ function Runtime() {
             let modulePath = modules.findPath(rawName);
             const possiblySwift = (modulePath === null) && (unfiltered || allModules.findPath(rawName) === null);
             if (possiblySwift) {
-                name = readUtf8String(rawName);
+                name = rawName.readUtf8String();
                 const probablySwift = name.indexOf('.') !== -1;
                 if (probablySwift) {
-                    const nominalTypeDescriptor = Memory.readPointer(classHandle.add(swiftNominalTypeDescriptorOffset));
+                    const nominalTypeDescriptor = classHandle.add(swiftNominalTypeDescriptorOffset).readPointer();
                     modulePath = modules.findPath(nominalTypeDescriptor);
                 }
             }
 
             if (modulePath !== null) {
                 if (name === null)
-                    name = readUtf8String(rawName);
+                    name = rawName.readUtf8String();
                 onMatch(name, modulePath);
             }
         }
@@ -1725,7 +1723,7 @@ function Runtime() {
             handle = null;
             types = method.types;
         } else {
-            types = Memory.readUtf8String(api.method_getTypeEncoding(handle));
+            types = api.method_getTypeEncoding(handle).readUtf8String();
         }
 
         const signature = parseSignature(types);
@@ -2342,7 +2340,7 @@ function Runtime() {
             const length = v.length;
             const array = Memory.alloc(length * pointerSize);
             for (let i = 0; i !== length; i++)
-                Memory.writePointer(array.add(i * pointerSize), toNativeId(v[i]));
+                array.add(i * pointerSize).writePointer(toNativeId(v[i]));
             return array;
         }
 
@@ -2480,8 +2478,8 @@ function Runtime() {
         'c': {
             type: 'char',
             size: 1,
-            read: Memory.readS8,
-            write: Memory.writeS8,
+            read: address => address.readS8(),
+            write: (address, value) => { address.writeS8(value); },
             toNative: function (v) {
                 if (typeof v === 'boolean') {
                     return v ? 1 : 0;
@@ -2492,74 +2490,74 @@ function Runtime() {
         'i': {
             type: 'int',
             size: 4,
-            read: Memory.readInt,
-            write: Memory.writeInt
+            read: address => address.readInt(),
+            write: (address, value) => { address.writeInt(value); }
         },
         's': {
             type: 'int16',
             size: 2,
-            read: Memory.readS16,
-            write: Memory.writeS16
+            read: address => address.readS16(),
+            write: (address, value) => { address.writeS16(value); }
         },
         'l': {
             type: 'int32',
             size: 4,
-            read: Memory.readS32,
-            write: Memory.writeS32
+            read: address => address.readS32(),
+            write: (address, value) => { address.writeS32(value); }
         },
         'q': {
             type: 'int64',
             size: 8,
-            read: Memory.readS64,
-            write: Memory.writeS64
+            read: address => address.readS64(),
+            write: (address, value) => { address.writeS64(value); }
         },
         'C': {
             type: 'uchar',
             size: 1,
-            read: Memory.readU8,
-            write: Memory.writeU8,
+            read: address => address.readU8(),
+            write: (address, value) => { address.writeU8(value); }
         },
         'I': {
             type: 'uint',
             size: 4,
-            read: Memory.readUInt,
-            write: Memory.writeUInt
+            read: address => address.readUInt(),
+            write: (address, value) => { address.writeUInt(value); }
         },
         'S': {
             type: 'uint16',
             size: 2,
-            read: Memory.readU16,
-            write: Memory.writeU16
+            read: address => address.readU16(),
+            write: (address, value) => { address.writeU16(value); }
         },
         'L': {
             type: 'uint' + longBits,
             size: longBits / 8,
-            read: Memory.readULong,
-            write: Memory.writeULong
+            read: address => address.readULong(),
+            write: (address, value) => { address.writeULong(value); }
         },
         'Q': {
             type: 'uint64',
             size: 8,
-            read: Memory.readU64,
-            write: Memory.writeU64
+            read: address => address.readU64(),
+            write: (address, value) => { address.writeU64(value); }
         },
         'f': {
             type: 'float',
             size: 4,
-            read: Memory.readFloat,
-            write: Memory.writeFloat
+            read: address => address.readFloat(),
+            write: (address, value) => { address.writeFloat(value); }
         },
         'd': {
             type: 'double',
             size: 8,
-            read: Memory.readDouble,
-            write: Memory.writeDouble
+            read: address => address.readDouble(),
+            write: (address, value) => { address.writeDouble(value); }
         },
         'B': {
             type: 'bool',
             size: 1,
-            read: Memory.readU8,
-            write: Memory.writeU8,
+            read: address => address.readU8(),
+            write: (address, value) => { address.writeU8(value); },
             fromNative: function (v) {
                 return v ? true : false;
             },
@@ -2574,57 +2572,54 @@ function Runtime() {
         '*': {
             type: 'pointer',
             size: pointerSize,
-            read: Memory.readPointer,
-            write: Memory.writePointer,
+            read: address => address.readPointer(),
+            write: (address, value) => { address.writePointer(value); },
             fromNative: function (h) {
-                if (h.isNull()) {
-                    return null;
-                }
-                return Memory.readUtf8String(h);
+                return h.readUtf8String();
             }
         },
         '@': {
             type: 'pointer',
             size: pointerSize,
-            read: Memory.readPointer,
-            write: Memory.writePointer,
+            read: address => address.readPointer(),
+            write: (address, value) => { address.writePointer(value); },
             fromNative: fromNativeId,
             toNative: toNativeId
         },
         '@?': {
             type: 'pointer',
             size: pointerSize,
-            read: Memory.readPointer,
-            write: Memory.writePointer,
+            read: address => address.readPointer(),
+            write: (address, value) => { address.writePointer(value); },
             fromNative: fromNativeBlock,
             toNative: toNativeBlock
         },
         '^@': {
             type: 'pointer',
             size: pointerSize,
-            read: Memory.readPointer,
-            write: Memory.writePointer,
+            read: address => address.readPointer(),
+            write: (address, value) => { address.writePointer(value); },
             toNative: toNativeObjectArray
         },
         '#': {
             type: 'pointer',
             size: pointerSize,
-            read: Memory.readPointer,
-            write: Memory.writePointer,
+            read: address => address.readPointer(),
+            write: (address, value) => { address.writePointer(value); },
             fromNative: fromNativeId,
             toNative: toNativeId
         },
         ':': {
             type: 'pointer',
             size: pointerSize,
-            read: Memory.readPointer,
-            write: Memory.writePointer
+            read: address => address.readPointer(),
+            write: (address, value) => { address.writePointer(value); }
         },
         '?': {
             type: 'pointer',
             size: pointerSize,
-            read: Memory.readPointer,
-            write: Memory.writePointer
+            read: address => address.readPointer(),
+            write: (address, value) => { address.writePointer(value); }
         }
     };
 

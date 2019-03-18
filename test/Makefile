@@ -4,7 +4,7 @@ IOS_HOST = iphone
 IOS_ARCH = arm64
 IOS_PREFIX = /usr/local/opt/frida-objc-tests-$(IOS_ARCH)
 
-frida_version := 12.3.3
+frida_version := 12.4.1
 
 cflags := -Wall -pipe -Os -g
 ldflags := -Wl,-framework,Foundation -lfrida-gumjs -lresolv -Wl,-dead_strip
