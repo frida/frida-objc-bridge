@@ -2162,7 +2162,7 @@ function Runtime() {
         } else if (id === '(') {
             readUntil('=', cursor);
             const unionFields = [];
-            while (peekChar(cursor) !== '}')
+            while (peekChar(cursor) !== ')')
                 unionFields.push(readType(cursor));
             skipChar(cursor); // ')'
             return unionType(unionFields);
