@@ -409,7 +409,8 @@ function Runtime() {
         "$protocols",
         "$methods",
         "$ownMethods",
-        "$ivars"
+        "$ivars",
+        "$imageName"
     ]);
 
     function ObjCObject(handle, protocol, cachedIsClass, superSpecifier) {
@@ -429,6 +430,7 @@ function Runtime() {
         let cachedOwnMethodNames = null;
         let cachedIvars = null;
         let weakRef = null;
+        let cachedImageName = null;
 
         handle = getHandle(handle);
 
@@ -580,6 +582,12 @@ function Runtime() {
                                 cachedIvars = new ObjCIvars(self, classHandle());
                         }
                         return cachedIvars;
+                    case "$imageName":
+                        if (cachedImageName === null) {
+                            if (isClass())
+                                cachedImageName = api.class_getImageName(handle);
+                        }
+                        return cachedImageName;
                     default:
                         if (typeof property === "symbol") {
                             return target[property];
@@ -2677,6 +2685,7 @@ function getApi() {
                 "class_copyProtocolList": ['pointer', ['pointer', 'pointer']],
                 "class_copyMethodList": ['pointer', ['pointer', 'pointer']],
                 "class_getClassMethod": ['pointer', ['pointer', 'pointer']],
+                "class_getImageName": ['pointer', ['pointer']],
                 "class_getInstanceMethod": ['pointer', ['pointer', 'pointer']],
                 "class_getSuperclass": ['pointer', ['pointer']],
                 "class_addProtocol": ['bool', ['pointer', 'pointer']],
