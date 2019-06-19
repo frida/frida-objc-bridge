@@ -4,7 +4,7 @@ IOS_HOST = iphone
 IOS_ARCH = arm64
 IOS_PREFIX = /usr/local/opt/frida-objc-tests-$(IOS_ARCH)
 
-frida_version := 12.4.1
+frida_version := 12.6.7
 
 cflags := -Wall -pipe -Os -g
 ldflags := -Wl,-framework,Foundation -lfrida-gumjs -lresolv -Wl,-dead_strip
@@ -15,7 +15,8 @@ macos_swift := $(shell xcrun --sdk macosx -f swift)
 macos_sdk := $(shell xcrun --sdk macosx --show-sdk-path)
 macos_cflags := -isysroot "$(macos_sdk)" -arch x86_64 $(cflags) -DHAVE_MACOS
 macos_runtimedir := $(toolchain)/usr/lib/swift/macosx
-macos_ldflags := "-L$(macos_runtimedir)" -lswiftObjectiveC "-Wl,-rpath,$(macos_runtimedir)" $(ldflags)
+macos_swift_runtimedir := /usr/lib/swift
+macos_ldflags := "-L$(macos_runtimedir)" -lswiftObjectiveC "-Wl,-rpath,$(macos_swift_runtimedir),-rpath,$(macos_runtimedir)" $(ldflags)
 
 ios_cc := $(shell xcrun --sdk iphoneos -f clang)
 ios_swift := $(shell xcrun --sdk iphoneos -f swift)
