@@ -17,6 +17,7 @@ TESTLIST_BEGIN (basics)
   TESTENTRY (kind_can_be_retrieved)
   TESTENTRY (super_can_be_retrieved)
   TESTENTRY (class_name_can_be_retrieved)
+  TESTENTRY (module_name_can_be_retrieved)
   TESTENTRY (protocols_can_be_retrieved)
   TESTENTRY (all_method_names_can_be_retrieved)
   TESTENTRY (own_method_names_can_be_retrieved)
@@ -216,6 +217,19 @@ TESTCASE (class_name_can_be_retrieved)
       "send(typeof now.$className);");
   EXPECT_SEND_MESSAGE_WITH ("\"NSDate\"");
   EXPECT_SEND_MESSAGE_WITH ("\"string\"");
+}
+
+TESTCASE (module_name_can_be_retrieved)
+{
+  COMPILE_AND_LOAD_SCRIPT (
+      "var NSString = ObjC.classes.NSString;"
+      "var badger = NSString.stringWithString_(\"badger\");"
+      "send(NSString.$moduleName);"
+      "send(badger.$moduleName);");
+  EXPECT_SEND_MESSAGE_WITH ("\"/System/Library/Frameworks"
+      "/Foundation.framework/Versions/C/Foundation\"");
+  EXPECT_SEND_MESSAGE_WITH ("\"/System/Library/Frameworks"
+      "/CoreFoundation.framework/Versions/A/CoreFoundation\"");
 }
 
 TESTCASE (protocols_can_be_retrieved)

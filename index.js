@@ -406,6 +406,7 @@ function Runtime() {
         "$superClass",
         "$class",
         "$className",
+        "$moduleName",
         "$protocols",
         "$methods",
         "$ownMethods",
@@ -419,6 +420,7 @@ function Runtime() {
         let cachedSuperClass = null;
         let cachedClass = null;
         let cachedClassName = null;
+        let cachedModuleName = null;
         let cachedProtocols = null;
         let cachedMethodNames = null;
         let cachedProtocolMethods = null;
@@ -518,6 +520,11 @@ function Runtime() {
                                 cachedClassName = api.object_getClassName(handle).readUtf8String();
                         }
                         return cachedClassName;
+                    case "$moduleName":
+                        if (cachedModuleName === null) {
+                            cachedModuleName = api.class_getImageName(classHandle()).readUtf8String();
+                        }
+                        return cachedModuleName;
                     case "$protocols":
                         if (cachedProtocols === null) {
                             cachedProtocols = {};
@@ -2674,6 +2681,7 @@ function getApi() {
                 "objc_registerClassPair": ['void', ['pointer']],
                 "class_isMetaClass": ['bool', ['pointer']],
                 "class_getName": ['pointer', ['pointer']],
+                "class_getImageName": ['pointer', ['pointer']],
                 "class_copyProtocolList": ['pointer', ['pointer', 'pointer']],
                 "class_copyMethodList": ['pointer', ['pointer', 'pointer']],
                 "class_getClassMethod": ['pointer', ['pointer', 'pointer']],
