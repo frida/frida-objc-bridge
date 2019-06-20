@@ -410,7 +410,7 @@ function Runtime() {
         "$methods",
         "$ownMethods",
         "$ivars",
-        "$imageName"
+        "$moduleName"
     ]);
 
     function ObjCObject(handle, protocol, cachedIsClass, superSpecifier) {
@@ -430,7 +430,7 @@ function Runtime() {
         let cachedOwnMethodNames = null;
         let cachedIvars = null;
         let weakRef = null;
-        let cachedImageName = null;
+        let cachedModuleName = null;
 
         handle = getHandle(handle);
 
@@ -582,12 +582,11 @@ function Runtime() {
                                 cachedIvars = new ObjCIvars(self, classHandle());
                         }
                         return cachedIvars;
-                    case "$imageName":
-                        if (cachedImageName === null) {
-                            if (isClass())
-                                cachedImageName = api.class_getImageName(handle);
+                    case "$moduleName":
+                        if (cachedModuleName === null) {
+                            cachedModuleName = api.class_getImageName(classHandle()).readUtf8String();
                         }
-                        return cachedImageName;
+                        return cachedModuleName;
                     default:
                         if (typeof property === "symbol") {
                             return target[property];

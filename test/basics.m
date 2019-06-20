@@ -21,6 +21,7 @@ TESTLIST_BEGIN (basics)
   TESTENTRY (all_method_names_can_be_retrieved)
   TESTENTRY (own_method_names_can_be_retrieved)
   TESTENTRY (ivars_can_be_accessed)
+  TESTENTRY (module_name_can_be_retrieved)
   TESTENTRY (class_method_can_be_invoked)
   TESTENTRY (object_can_be_constructed_from_pointer)
   TESTENTRY (string_can_be_constructed)
@@ -294,6 +295,15 @@ TESTCASE (ivars_can_be_accessed)
   EXPECT_SEND_MESSAGE_WITH ("\"Calculator\"");
   EXPECT_SEND_MESSAGE_WITH ("[\"isa\",\"name\"]");
   EXPECT_NO_MESSAGES ();
+}
+
+TESTCASE (module_name_can_be_retrieved)
+{
+  COMPILE_AND_LOAD_SCRIPT (
+      "var NSString = ObjC.classes.NSString;"
+      "var badger = NSString.stringWithString_(\"badger\");"
+      "send(badger.$moduleName);");
+  EXPECT_SEND_MESSAGE_WITH ("\"/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation\"");
 }
 
 TESTCASE (class_method_can_be_invoked)
