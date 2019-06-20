@@ -302,8 +302,12 @@ TESTCASE (module_name_can_be_retrieved)
   COMPILE_AND_LOAD_SCRIPT (
       "var NSString = ObjC.classes.NSString;"
       "var badger = NSString.stringWithString_(\"badger\");"
+      "send(NSString.$moduleName);"
       "send(badger.$moduleName);");
-  EXPECT_SEND_MESSAGE_WITH ("\"/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation\"");
+  EXPECT_SEND_MESSAGE_WITH ("\"/System/Library/Frameworks"
+      "/Foundation.framework/Versions/C/Foundation\"");
+  EXPECT_SEND_MESSAGE_WITH ("\"/System/Library/Frameworks"
+      "/CoreFoundation.framework/Versions/A/CoreFoundation\"");
 }
 
 TESTCASE (class_method_can_be_invoked)
