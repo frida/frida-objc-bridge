@@ -420,6 +420,7 @@ function Runtime() {
         let cachedSuperClass = null;
         let cachedClass = null;
         let cachedClassName = null;
+        let cachedModuleName = null;
         let cachedProtocols = null;
         let cachedMethodNames = null;
         let cachedProtocolMethods = null;
@@ -430,7 +431,6 @@ function Runtime() {
         let cachedOwnMethodNames = null;
         let cachedIvars = null;
         let weakRef = null;
-        let cachedModuleName = null;
 
         handle = getHandle(handle);
 
@@ -473,11 +473,6 @@ function Runtime() {
                         return function () {
                             return receiver.$className;
                         };
-                    case "$moduleName":
-                        if (cachedModuleName === null) {
-                            cachedModuleName = api.class_getImageName(classHandle()).readUtf8String();
-                        }
-                        return cachedModuleName;
                     case "equals":
                         return equals;
                     case "$kind":
@@ -525,6 +520,11 @@ function Runtime() {
                                 cachedClassName = api.object_getClassName(handle).readUtf8String();
                         }
                         return cachedClassName;
+                    case "$moduleName":
+                        if (cachedModuleName === null) {
+                            cachedModuleName = api.class_getImageName(classHandle()).readUtf8String();
+                        }
+                        return cachedModuleName;
                     case "$protocols":
                         if (cachedProtocols === null) {
                             cachedProtocols = {};
