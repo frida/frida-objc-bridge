@@ -406,11 +406,11 @@ function Runtime() {
         "$superClass",
         "$class",
         "$className",
+        "$moduleName",
         "$protocols",
         "$methods",
         "$ownMethods",
-        "$ivars",
-        "$moduleName"
+        "$ivars"
     ]);
 
     function ObjCObject(handle, protocol, cachedIsClass, superSpecifier) {
@@ -473,6 +473,11 @@ function Runtime() {
                         return function () {
                             return receiver.$className;
                         };
+                    case "$moduleName":
+                        if (cachedModuleName === null) {
+                            cachedModuleName = api.class_getImageName(classHandle()).readUtf8String();
+                        }
+                        return cachedModuleName;
                     case "equals":
                         return equals;
                     case "$kind":
@@ -582,11 +587,6 @@ function Runtime() {
                                 cachedIvars = new ObjCIvars(self, classHandle());
                         }
                         return cachedIvars;
-                    case "$moduleName":
-                        if (cachedModuleName === null) {
-                            cachedModuleName = api.class_getImageName(classHandle()).readUtf8String();
-                        }
-                        return cachedModuleName;
                     default:
                         if (typeof property === "symbol") {
                             return target[property];
