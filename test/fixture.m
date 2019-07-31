@@ -282,7 +282,6 @@ test_fixture_compile_and_load_script (TestFixture * fixture,
   va_end (args);
 
   source = g_strconcat (
-      "'use strict';\n",
       frida_objc_bundle,
       "\n;\n",
       "(function testcase(ObjC) {\n",
