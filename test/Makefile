@@ -2,7 +2,7 @@ RUNNER_ARGS ?=
 
 IOS_HOST = iphone
 IOS_ARCH = arm64
-IOS_PREFIX = /usr/local/opt/frida-objc-tests-$(IOS_ARCH)
+IOS_PREFIX = /usr/local/opt/frida-objc-bridge-tests-$(IOS_ARCH)
 
 frida_version := 12.6.7
 
@@ -50,22 +50,22 @@ clean:
 build-macos: build/macos-x86_64/runner
 build-ios: build/ios-$(IOS_ARCH)/runner
 
-run-macos: build/macos-x86_64/runner build/frida-objc.js
+run-macos: build/macos-x86_64/runner build/frida-objc-bridge.js
 	$< $(RUNNER_ARGS)
-run-ios: build/ios-$(IOS_ARCH)/runner build/frida-objc.js build/ios-$(IOS_ARCH)/.swift-runtime-stamp
-	cd build/ios-$(IOS_ARCH)/ && rsync -rLz runner ../frida-objc.js *.dylib "$(IOS_HOST):$(IOS_PREFIX)/"
+run-ios: build/ios-$(IOS_ARCH)/runner build/frida-objc-bridge.js build/ios-$(IOS_ARCH)/.swift-runtime-stamp
+	cd build/ios-$(IOS_ARCH)/ && rsync -rLz runner ../frida-objc-bridge.js *.dylib "$(IOS_HOST):$(IOS_PREFIX)/"
 	ssh $(IOS_HOST) "$(IOS_PREFIX)/runner $(RUNNER_ARGS)"
 
-watch-macos: build/macos-x86_64/runner build/frida-objc.js
+watch-macos: build/macos-x86_64/runner build/frida-objc-bridge.js
 	npm run watch &
 	./node_modules/.bin/chokidar \
-		build/frida-objc.js \
+		build/frida-objc-bridge.js \
 		-c 'build/macos-x86_64/runner $(RUNNER_ARGS)'
-watch-ios: build/ios-$(IOS_ARCH)/runner build/frida-objc.js
+watch-ios: build/ios-$(IOS_ARCH)/runner build/frida-objc-bridge.js
 	npm run watch &
 	./node_modules/.bin/chokidar \
-		build/frida-objc.js \
-		-c 'scp build/frida-objc.js "$(IOS_HOST):$(IOS_PREFIX)/" \
+		build/frida-objc-bridge.js \
+		-c 'scp build/frida-objc-bridge.js "$(IOS_HOST):$(IOS_PREFIX)/" \
 			&& ssh $(IOS_HOST) "$(IOS_PREFIX)/runner $(RUNNER_ARGS)"'
 
 build/macos-x86_64/runner: $(objc_sources) $(objc_headers) build/macos-x86_64/taylor.o build/macos-x86_64/libfrida-gumjs.a
@@ -126,7 +126,7 @@ build/%/libfrida-gumjs.a:
 	@mkdir -p $(@D)
 	curl -Ls https://github.com/frida/frida/releases/download/$(frida_version)/frida-gumjs-devkit-$(frida_version)-$*.tar.xz | tar -xJf - -C $(@D)
 
-build/frida-objc.js: $(js_sources) node_modules
+build/frida-objc-bridge.js: $(js_sources) node_modules
 	npm run build
 
 node_modules: package.json

@@ -1,13 +1,13 @@
 {
-  "name": "frida-objc-bundle",
+  "name": "frida-objc-bridge-bundle",
   "version": "1.0.0",
-  "description": "Bundled up version of frida-objc for testing",
+  "description": "Bundled up version of frida-objc-bridge for testing",
   "private": true,
   "main": "bundle.js",
   "scripts": {
     "prepublish": "npm run build",
-    "build": "frida-compile bundle -o build/frida-objc.js",
-    "watch": "frida-compile bundle -o build/frida-objc.js -w"
+    "build": "frida-compile bundle -o build/frida-objc-bridge.js",
+    "watch": "frida-compile bundle -o build/frida-objc-bridge.js -w"
   },
   "license": "LGPL-2.0 WITH WxWindows-exception-3.1",
   "dependencies": {

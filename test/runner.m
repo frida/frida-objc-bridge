@@ -90,7 +90,7 @@ load_bundle (void)
 #else
   bundle_dir = g_strdup (runner_dir);
 #endif
-  bundle_location = g_build_filename (bundle_dir, "frida-objc.js", NULL);
+  bundle_location = g_build_filename (bundle_dir, "frida-objc-bridge.js", NULL);
   g_free (bundle_dir);
   g_free (runner_dir);
   g_free (runner_location);

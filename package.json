@@ -1,5 +1,5 @@
 {
-  "name": "frida-objc",
+  "name": "frida-objc-bridge",
   "version": "4.0.1",
   "description": "Objective-C runtime interop from Frida",
   "main": "index.js",
@@ -8,11 +8,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/frida/frida-objc.git"
+    "url": "git+https://github.com/frida/frida-objc-bridge.git"
   },
   "license": "LGPL-2.0 WITH WxWindows-exception-3.1",
   "bugs": {
-    "url": "https://github.com/frida/frida-objc/issues"
+    "url": "https://github.com/frida/frida-objc-bridge/issues"
   },
-  "homepage": "https://github.com/frida/frida-objc#readme"
+  "homepage": "https://github.com/frida/frida-objc-bridge#readme"
 }
