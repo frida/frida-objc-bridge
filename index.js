@@ -1685,22 +1685,17 @@ function Runtime() {
         }
         if (!(cls instanceof ObjCObject && (cls.$kind === 'class' || cls.$kind === 'meta-class')))
             throw new Error("Expected an ObjC.Object for a class or meta-class");
-        const clsPtr = cls.handle;
 
-        const classHandles = subclasses ? getRecursiveSubclasses(clsPtr) : [clsPtr];
-        const classes = new Set(classHandles.map(h => h.toString()));
-        const getInstanceSize = api.class_getInstanceSize;
+        const matches = gonzales.get()
+            .choose(cls, subclasses)
+            .map(handle => new ObjCObject(handle));
+        for (const match of matches) {
+            const result = callbacks.onMatch(match);
+            if (result === 'stop')
+                break;
+        }
 
-        Process.enumerateMallocRanges({
-            onMatch: function (range) {
-                const base = range.base;
-                const cls = readObjectIsa(base);
-                if (classes.has(cls.toString()) && range.size >= getInstanceSize(cls)) {
-                    return callbacks.onMatch(new ObjCObject(base));
-                }
-            },
-            onComplete: callbacks.onComplete
-        });
+        callbacks.onComplete();
     }
 
     function getRecursiveSubclasses(ptr) {
