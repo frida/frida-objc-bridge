@@ -1698,22 +1698,6 @@ function Runtime() {
         callbacks.onComplete();
     }
 
-    function getRecursiveSubclasses(ptr) {
-        const subclasses = [];
-        for (let name in classRegistry) {
-            const cls = classRegistry[name].handle;
-            let c = cls;
-            do {
-                if (c.equals(ptr)) {
-                    subclasses.push(cls);
-                    break;
-                }
-                c = api.class_getSuperclass(c);
-            } while (!c.isNull());
-        }
-        return subclasses;
-    }
-
     function makeMethodInvocationWrapper(method, owner, superSpecifier, replaceImplementation) {
         const sel = method.sel;
         let handle = method.handle;
