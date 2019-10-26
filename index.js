@@ -2074,7 +2074,7 @@ function Runtime() {
 
         const argTypes = [];
 
-        let id = retType.type;
+        let id = JSON.stringify(retType.type);
 
         while (dataAvailable(cursor)) {
             parseQualifiers(cursor);
@@ -2082,7 +2082,7 @@ function Runtime() {
             readNumber(cursor);
             argTypes.push(argType);
 
-            id += argType.type;
+            id += JSON.stringify(argType.type);
         }
 
         return {
@@ -2426,11 +2426,11 @@ function Runtime() {
         if (largestType.fromNative) {
             const fromTransform = largestType.fromNative;
             fromNative = function (v) {
-                return [fromTransform.call(this, v)];
+                return fromTransform.call(this, v[0]);
             };
         } else {
             fromNative = function (v) {
-                return [v];
+                return v[0];
             };
         }
 

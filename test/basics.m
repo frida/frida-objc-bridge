@@ -488,6 +488,7 @@ TESTCASE (basic_method_implementation_can_be_overridden)
 typedef struct _FridaRect FridaRect;
 typedef struct _FridaPoint FridaPoint;
 typedef struct _FridaSize FridaSize;
+typedef union _FridaUnion FridaUnion;
 
 struct _FridaPoint
 {
@@ -505,6 +506,13 @@ struct _FridaRect
 {
   FridaPoint origin;
   FridaSize size;
+};
+
+union _FridaUnion
+{
+  unsigned short s;
+  unsigned int i;
+  unsigned long long l;
 };
 
 @interface FridaWidget : NSObject
@@ -715,6 +723,7 @@ METHOD(char *, char_ptr)
 METHOD(id, id)
 METHOD(Class, Class)
 METHOD(SEL, SEL)
+METHOD(FridaUnion, FridaUnion)
 @end
 
 TESTCASE (method_call_preserves_value)
@@ -784,9 +793,10 @@ TESTCASE (method_call_preserves_value)
       "test('Class', FridaTest2);"
       "test('Class', ObjC.classes.NSObject);"
       "test('SEL', ObjC.selector('foo'));"
-      "test('SEL', ObjC.selector('foo:bar:baz:'));");
+      "test('SEL', ObjC.selector('foo:bar:baz:'));"
+      "test('FridaUnion', 12345);");
 
-  for (gint i = 0; i != 39; i++)
+  for (gint i = 0; i != 40; i++)
   {
     EXPECT_SEND_MESSAGE_WITH ("true");
   }
