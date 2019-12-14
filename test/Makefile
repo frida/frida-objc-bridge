@@ -14,7 +14,7 @@ macos_cc := $(shell xcrun --sdk macosx -f clang)
 macos_swift := $(shell xcrun --sdk macosx -f swift)
 macos_sdk := $(shell xcrun --sdk macosx --show-sdk-path)
 macos_cflags := -isysroot "$(macos_sdk)" -arch x86_64 $(cflags) -DHAVE_MACOS
-macos_runtimedir := $(toolchain)/usr/lib/swift/macosx
+macos_runtimedir := $(toolchain)/usr/lib/swift-5.0/macosx
 macos_swift_runtimedir := /usr/lib/swift
 macos_ldflags := "-L$(macos_runtimedir)" -lswiftObjectiveC "-Wl,-rpath,$(macos_swift_runtimedir),-rpath,$(macos_runtimedir)" $(ldflags)
 
@@ -22,7 +22,7 @@ ios_cc := $(shell xcrun --sdk iphoneos -f clang)
 ios_swift := $(shell xcrun --sdk iphoneos -f swift)
 ios_sdk := $(shell xcrun --sdk iphoneos --show-sdk-path)
 ios_cflags := -isysroot "$(ios_sdk)" -arch $(IOS_ARCH) -miphoneos-version-min=7.0 $(cflags) -DHAVE_IOS
-ios_runtimedir := $(toolchain)/usr/lib/swift/iphoneos
+ios_runtimedir := $(toolchain)/usr/lib/swift-5.0/iphoneos
 ios_ldflags := "-L$(ios_runtimedir)" -lswiftObjectiveC "-Wl,-rpath,$(IOS_PREFIX)" $(ldflags)
 ios_codesign := $(shell xcrun --sdk iphoneos -f codesign)
 ios_swift_libraries := \
