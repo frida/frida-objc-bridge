@@ -845,7 +845,7 @@ TESTCASE (method_call_can_be_traced)
 {
   COMPILE_AND_LOAD_SCRIPT (
       "var FridaTest1 = ObjC.classes.FridaTest1;"
-      "var fooBar = FridaTest1.$wrapMethod('+ fooBar:', {"
+      "var fooBar = FridaTest1.fooBar_.clone({"
           "exceptions: 'propagate',"
           "traps: 'all',"
       "});"

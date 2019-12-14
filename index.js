@@ -413,7 +413,6 @@ function Runtime() {
         "$protocols",
         "$methods",
         "$ownMethods",
-        "$wrapMethod",
         "$ivars"
     ]);
 
@@ -583,8 +582,6 @@ function Runtime() {
                             cachedOwnMethodNames = classMethods.concat(instanceMethods);
                         }
                         return cachedOwnMethodNames;
-                    case "$wrapMethod":
-                        return makeMethodWrapper;
                     case "$ivars":
                         if (cachedIvars === null) {
                             if (isClass())
@@ -904,13 +901,6 @@ function Runtime() {
                 method.wrapper = wrapper;
             }
             return wrapper;
-        }
-
-        function makeMethodWrapper(name, options) {
-            const method = findMethod(name);
-            if (method === null)
-                throw new Error("Unable to find a method named '" + name + "'");
-            return makeMethodInvocationWrapper(method, self, superSpecifier, replaceMethodImplementation, options);
         }
 
         function replaceMethodImplementation(methodHandle, imp, oldImp) {
@@ -1811,6 +1801,10 @@ function Runtime() {
             enumerable: true,
             value: types
         });
+
+        m.clone = function (options) {
+            return makeMethodInvocationWrapper(method, owner, superSpecifier, replaceImplementation, options);
+        };
 
         function getMethodHandle() {
             if (handle === null) {
