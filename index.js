@@ -269,10 +269,13 @@ function Runtime() {
 
         function findClass(name) {
             let handle = cachedClasses[name];
-            if (handle === undefined)
+            if (handle === undefined) {
                 handle = api.objc_lookUpClass(Memory.allocUtf8String(name));
-            if (handle.isNull())
-                return null;
+                if (handle.isNull())
+                    return null;
+                cachedClasses[name] = handle;
+            }
+
             return new ObjCObject(handle, undefined, true);
         }
 
@@ -364,10 +367,13 @@ function Runtime() {
 
         function findProtocol(name) {
             let handle = cachedProtocols[name];
-            if (handle === undefined)
+            if (handle === undefined) {
                 handle = api.objc_getProtocol(Memory.allocUtf8String(name));
-            if (handle.isNull())
-                return null;
+                if (handle.isNull())
+                    return null;
+                cachedProtocols[name] = handle;
+            }
+
             return new ObjCProtocol(handle);
         }
 
