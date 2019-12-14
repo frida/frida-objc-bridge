@@ -1762,10 +1762,7 @@ function Runtime() {
             get: getMethodHandle
         });
 
-        Object.defineProperty(m, 'selector', {
-            enumerable: true,
-            value: sel
-        });
+        m.selector = sel;
 
         Object.defineProperty(m, 'implementation', {
             enumerable: true,
@@ -1785,22 +1782,11 @@ function Runtime() {
             }
         });
 
-        Object.defineProperty(m, 'returnType', {
-            enumerable: true,
-            value: retType.type
-        });
+        m.returnType = retType.type;
 
-        Object.defineProperty(m, 'argumentTypes', {
-            enumerable: true,
-            value: signature.argTypes.map(function (t) {
-                return t.type;
-            })
-        });
+        m.argumentTypes = signature.argTypes.map(t => t.type);
 
-        Object.defineProperty(m, 'types', {
-            enumerable: true,
-            value: types
-        });
+        m.types = types;
 
         m.clone = function (options) {
             return makeMethodInvocationWrapper(method, owner, superSpecifier, replaceImplementation, options);
