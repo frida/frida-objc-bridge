@@ -1,6 +1,6 @@
 /* jshint esnext: true, evil: true */
 
-const {getApi, nativeFunctionOptions} = require('./lib/api');
+const {getApi, defaultInvocationOptions} = require('./lib/api');
 const gonzales = require('./lib/gonzales');
 
 function Runtime() {
@@ -413,6 +413,7 @@ function Runtime() {
         "$protocols",
         "$methods",
         "$ownMethods",
+        "$wrapMethod",
         "$ivars"
     ]);
 
@@ -582,6 +583,8 @@ function Runtime() {
                             cachedOwnMethodNames = classMethods.concat(instanceMethods);
                         }
                         return cachedOwnMethodNames;
+                    case "$wrapMethod":
+                        return makeMethodWrapper;
                     case "$ivars":
                         if (cachedIvars === null) {
                             if (isClass())
@@ -897,10 +900,17 @@ function Runtime() {
                 return null;
             let wrapper = method.wrapper;
             if (wrapper === null) {
-                wrapper = makeMethodInvocationWrapper(method, self, superSpecifier, replaceMethodImplementation);
+                wrapper = makeMethodInvocationWrapper(method, self, superSpecifier, replaceMethodImplementation, defaultInvocationOptions);
                 method.wrapper = wrapper;
             }
             return wrapper;
+        }
+
+        function makeMethodWrapper(name, options) {
+            const method = findMethod(name);
+            if (method === null)
+                throw new Error("Unable to find a method named '" + name + "'");
+            return makeMethodInvocationWrapper(method, self, superSpecifier, replaceMethodImplementation, options);
         }
 
         function replaceMethodImplementation(methodHandle, imp, oldImp) {
@@ -1274,8 +1284,10 @@ function Runtime() {
     const BLOCK_HAS_STRET =        (1 << 29);
     const BLOCK_HAS_SIGNATURE =    (1 << 30);
 
-    function Block(target) {
-        const priv = {};
+    function Block(target, options = defaultInvocationOptions) {
+        const priv = {
+            options,
+        };
         this[PRIV] = priv;
 
         if (target instanceof NativePointer) {
@@ -1335,7 +1347,7 @@ function Runtime() {
                 address,
                 signature.retType.type,
                 signature.argTypes.map(function (arg) { return arg.type; }),
-                nativeFunctionOptions));
+                priv.options));
         },
         set: function (func) {
             const priv = this[PRIV];
@@ -1704,7 +1716,7 @@ function Runtime() {
         callbacks.onComplete();
     }
 
-    function makeMethodInvocationWrapper(method, owner, superSpecifier, replaceImplementation) {
+    function makeMethodInvocationWrapper(method, owner, superSpecifier, replaceImplementation, invocationOptions) {
         const sel = method.sel;
         let handle = method.handle;
         let types;
@@ -1718,7 +1730,10 @@ function Runtime() {
         const signature = parseSignature(types);
         const retType = signature.retType;
         const argTypes = signature.argTypes.slice(2);
-        const objc_msgSend = superSpecifier ? getMsgSendSuperImpl(signature) : getMsgSendImpl(signature);
+
+        const objc_msgSend = superSpecifier
+            ? getMsgSendSuperImpl(signature, invocationOptions)
+            : getMsgSendImpl(signature, invocationOptions);
 
         const argVariableNames = argTypes.map(function (t, i) {
             return "a" + (i + 1);
@@ -1767,7 +1782,7 @@ function Runtime() {
             get: function () {
                 const h = getMethodHandle();
 
-                return new NativeFunction(api.method_getImplementation(h), m.returnType, m.argumentTypes, nativeFunctionOptions);
+                return new NativeFunction(api.method_getImplementation(h), m.returnType, m.argumentTypes, invocationOptions);
             },
             set: function (imp) {
                 const h = getMethodHandle();
@@ -1995,38 +2010,47 @@ function Runtime() {
         }
     }
 
-    function getMsgSendImpl(signature) {
-        return getMsgSendImplFromCache(msgSendBySignatureId, signature, false);
+    function getMsgSendImpl(signature, invocationOptions) {
+        return resolveMsgSendImpl(msgSendBySignatureId, signature, invocationOptions, false);
     }
 
-    function getMsgSendSuperImpl(signature) {
-        return getMsgSendImplFromCache(msgSendSuperBySignatureId, signature, true);
+    function getMsgSendSuperImpl(signature, invocationOptions) {
+        return resolveMsgSendImpl(msgSendSuperBySignatureId, signature, invocationOptions, true);
     }
 
-    function getMsgSendImplFromCache(cache, signature, isSuper) {
-        let impl = cache[signature.id];
-        if (!impl) {
-            const retType = signature.retType.type;
-            const argTypes = signature.argTypes.map(function (t) { return t.type; });
+    function resolveMsgSendImpl(cache, signature, invocationOptions, isSuper) {
+        if (invocationOptions !== defaultInvocationOptions)
+            return makeMsgSendImpl(signature, invocationOptions, isSuper);
 
-            const components = ['objc_msgSend'];
+        const {id} = signature;
 
-            if (isSuper)
-                components.push('Super');
-
-            const returnsStruct = retType instanceof Array;
-            if (returnsStruct && !typeFitsInRegisters(retType))
-                components.push('_stret');
-            else if (retType === 'float' || retType === 'double')
-                components.push('_fpret');
-
-            const name = components.join('');
-
-            impl = new NativeFunction(api[name], retType, argTypes, nativeFunctionOptions);
-            cache[signature.id] = impl;
+        let impl = cache[id];
+        if (impl === undefined) {
+            impl = makeMsgSendImpl(signature, invocationOptions, isSuper);
+            cache[id] = impl;
         }
 
         return impl;
+    }
+
+    function makeMsgSendImpl(signature, invocationOptions, isSuper) {
+        const retType = signature.retType.type;
+        const argTypes = signature.argTypes.map(function (t) { return t.type; });
+
+        const components = ['objc_msgSend'];
+
+        if (isSuper)
+            components.push('Super');
+
+        const returnsStruct = retType instanceof Array;
+        if (returnsStruct && !typeFitsInRegisters(retType))
+            components.push('_stret');
+        else if (retType === 'float' || retType === 'double')
+            components.push('_fpret');
+
+        const name = components.join('');
+
+        return new NativeFunction(api[name], retType, argTypes, invocationOptions);
     }
 
     function typeFitsInRegisters(type) {

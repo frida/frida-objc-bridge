@@ -31,6 +31,7 @@ TESTLIST_BEGIN (basics)
   TESTGROUP_BEGIN ("Block")
     TESTENTRY (block_can_be_implemented)
     TESTENTRY (block_can_be_invoked)
+    TESTENTRY (block_can_be_traced_while_invoked)
     TESTENTRY (block_can_be_migrated_to_the_heap_behind_our_back)
   TESTGROUP_END ()
 
@@ -43,6 +44,7 @@ TESTLIST_BEGIN (basics)
   TESTENTRY (proxied_method_can_be_overridden)
   TESTENTRY (methods_with_weird_names_can_be_invoked)
   TESTENTRY (method_call_preserves_value)
+  TESTENTRY (method_call_can_be_traced)
   TESTENTRY (objects_can_be_serialized_to_json)
 
   TESTGROUP_BEGIN ("EnumerateLoadedClasses")
@@ -420,6 +422,7 @@ TESTCASE (block_can_be_invoked)
   NSString * (^block) (NSString *) = ^NSString * (NSString * name) {
     return [NSString stringWithFormat:@"Hello %@", name];
   };
+
   COMPILE_AND_LOAD_SCRIPT (
       "var pool = ObjC.classes.NSAutoreleasePool.alloc().init();"
       "var block = new ObjC.Block(" GUM_PTR_CONST ");"
@@ -429,6 +432,42 @@ TESTCASE (block_can_be_invoked)
       block);
   EXPECT_SEND_MESSAGE_WITH ("true");
   EXPECT_SEND_MESSAGE_WITH ("\"Hello Badger\"");
+  EXPECT_NO_MESSAGES ();
+}
+
+TESTCASE (block_can_be_traced_while_invoked)
+{
+  NSString * (^block) (NSString *) = ^NSString * (NSString * name) {
+    return [NSString stringWithFormat:@"Hello %@", name];
+  };
+
+  COMPILE_AND_LOAD_SCRIPT (
+      "var pool = ObjC.classes.NSAutoreleasePool.alloc().init();"
+      "var block = new ObjC.Block(" GUM_PTR_CONST ", {"
+          "exceptions: 'propagate',"
+          "traps: 'all',"
+      "});"
+
+      "Stalker.exclude(Process.getModuleByName('runner'));"
+      "Stalker.queueDrainInterval = 0;"
+
+      "Stalker.follow({"
+          "events: {"
+              "call: true,"
+          "},"
+          "onCallSummary: function (summary) {"
+              "send('onCallSummary');"
+          "}"
+      "});"
+
+      "send(block.implementation('Badger').toString());"
+      "pool.release();"
+
+      "Stalker.flush();",
+
+      block);
+  EXPECT_SEND_MESSAGE_WITH ("\"Hello Badger\"");
+  EXPECT_SEND_MESSAGE_WITH ("\"onCallSummary\"");
   EXPECT_NO_MESSAGES ();
 }
 
@@ -800,6 +839,34 @@ TESTCASE (method_call_preserves_value)
   {
     EXPECT_SEND_MESSAGE_WITH ("true");
   }
+}
+
+TESTCASE (method_call_can_be_traced)
+{
+  COMPILE_AND_LOAD_SCRIPT (
+      "var FridaTest1 = ObjC.classes.FridaTest1;"
+      "var fooBar = FridaTest1.$wrapMethod('+ fooBar:', {"
+          "exceptions: 'propagate',"
+          "traps: 'all',"
+      "});"
+
+      "Stalker.exclude(Process.getModuleByName('runner'));"
+      "Stalker.queueDrainInterval = 0;"
+
+      "Stalker.follow({"
+          "events: {"
+              "call: true,"
+          "},"
+          "onCallSummary: function (summary) {"
+              "send('onCallSummary');"
+          "}"
+      "});"
+
+      "fooBar.call(FridaTest1, 42);"
+
+      "Stalker.flush();");
+  EXPECT_SEND_MESSAGE_WITH ("\"onCallSummary\"");
+  EXPECT_NO_MESSAGES ();
 }
 
 TESTCASE (objects_can_be_serialized_to_json)
