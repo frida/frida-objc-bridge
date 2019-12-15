@@ -242,6 +242,7 @@ function Runtime() {
                         // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
                         target[name] = true;
                     }
+                    numCachedClasses = numClasses;
                 }
                 return Object.keys(cachedClasses);
             },
@@ -274,6 +275,7 @@ function Runtime() {
                 if (handle.isNull())
                     return null;
                 cachedClasses[name] = handle;
+                numCachedClasses++;
             }
 
             return new ObjCObject(handle, undefined, true);
@@ -299,6 +301,7 @@ function Runtime() {
 
     function ProtocolRegistry() {
         let cachedProtocols = {};
+        let numCachedProtocols = 0;
 
         const registry = new Proxy(this, {
             has(target, property) {
@@ -334,15 +337,18 @@ function Runtime() {
                 const protocolHandles = api.objc_copyProtocolList(numProtocolsBuf);
                 try {
                     const numProtocols = numProtocolsBuf.readUInt();
-                    for (let i = 0; i !== numProtocols; i++) {
-                        const handle = protocolHandles.add(i * pointerSize).readPointer();
-                        const name = api.protocol_getName(handle).readUtf8String();
+                    if (numProtocols !== numCachedProtocols) {
+                        for (let i = 0; i !== numProtocols; i++) {
+                            const handle = protocolHandles.add(i * pointerSize).readPointer();
+                            const name = api.protocol_getName(handle).readUtf8String();
 
-                        protocolNames.push(name);
-                        cachedProtocols[name] = handle;
+                            protocolNames.push(name);
+                            cachedProtocols[name] = handle;
 
-                        // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
-                        target[name] = true;
+                            // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
+                            target[name] = true;
+                        }
+                        numCachedProtocols = numProtocols;
                     }
                 } finally {
                     api.free(protocolHandles);
@@ -372,6 +378,7 @@ function Runtime() {
                 if (handle.isNull())
                     return null;
                 cachedProtocols[name] = handle;
+                numCachedProtocols++;
             }
 
             return new ObjCProtocol(handle);
