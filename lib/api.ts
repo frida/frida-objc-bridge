@@ -1,16 +1,37 @@
-let cachedApi = null;
+interface ObjCApis {
+    [name: string]: NativeFunction;
+}
 
-const defaultInvocationOptions = {
+interface ApiDescriptions {
+    module: string;
+    functions: {
+        [name: string]: FunctionDeclaration | FunctionAssignment | NativePointer;
+    };
+    variables?: {
+        [name: string]: FunctionAssignment | NativePointer;
+    },
+    optionals?: {
+        [name: string]: string;
+    };
+}
+
+type FunctionDeclaration = [string, string[]];
+
+type FunctionAssignment = (address: NativePointer) => void;
+
+let cachedApi: ObjCApis | null = null;
+
+export const defaultInvocationOptions: NativeFunctionOptions = {
     exceptions: 'propagate'
 };
 
-function getApi() {
+export function getApi(): ObjCApis | null {
     if (cachedApi !== null) {
         return cachedApi;
     }
 
-    const temporaryApi = {};
-    const pending = [
+    const temporaryApi: ObjCApis = {};
+    const pending: ApiDescriptions[] = [
         {
             module: "libsystem_malloc.dylib",
             functions: {
@@ -99,7 +120,7 @@ function getApi() {
         }
     ];
     let remaining = 0;
-    pending.forEach(function (api) {
+    pending.forEach(api => {
         const isObjCApi = api.module === 'libobjc.A.dylib';
         const functions = api.functions || {};
         const variables = api.variables || {};
@@ -107,26 +128,24 @@ function getApi() {
 
         remaining += Object.keys(functions).length + Object.keys(variables).length;
 
-        const exportByName = Module
-        .enumerateExportsSync(api.module)
-        .reduce(function (result, exp) {
+        const exportByName = Process
+        .getModuleByName(api.module)
+        .enumerateExports()
+        .reduce((result, exp) => {
             result[exp.name] = exp;
             return result;
-        }, {});
+        }, <any> {});
 
         Object.keys(functions)
-        .forEach(function (name) {
+        .forEach(name => {
             const exp = exportByName[name];
             if (exp !== undefined && exp.type === 'function') {
                 const signature = functions[name];
                 if (typeof signature === 'function') {
                     signature.call(temporaryApi, exp.address);
-                    if (isObjCApi)
-                        signature.call(temporaryApi, exp.address);
                 } else {
-                    temporaryApi[name] = new NativeFunction(exp.address, signature[0], signature[1], defaultInvocationOptions);
-                    if (isObjCApi)
-                        temporaryApi[name] = temporaryApi[name];
+                    const types = <FunctionDeclaration> signature;
+                    temporaryApi[name] = new NativeFunction(exp.address, types[0], types[1], defaultInvocationOptions);
                 }
                 remaining--;
             } else {
@@ -137,10 +156,10 @@ function getApi() {
         });
 
         Object.keys(variables)
-        .forEach(function (name) {
+        .forEach(name => {
             const exp = exportByName[name];
             if (exp !== undefined && exp.type === 'variable') {
-                const handler = variables[name];
+                const handler = <FunctionAssignment> variables[name];
                 handler.call(temporaryApi, exp.address);
                 remaining--;
             }
@@ -161,8 +180,3 @@ function getApi() {
 
     return cachedApi;
 }
-
-module.exports = {
-    getApi,
-    defaultInvocationOptions,
-};

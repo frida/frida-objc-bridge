@@ -2,11 +2,21 @@
   "name": "frida-objc-bridge",
   "version": "4.1.1",
   "description": "Objective-C runtime interop from Frida",
-  "main": "index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "files": [
-    "/index.js",
-    "/lib/**/*.js"
+    "/dist/"
   ],
+  "scripts": {
+    "prepare": "npm run build",
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "devDependencies": {
+    "@types/frida-gum": "^14.1.0",
+    "@types/node": "^12.7.2",
+    "typescript": "^3.5.3"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/frida/frida-objc-bridge.git"

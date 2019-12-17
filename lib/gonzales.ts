@@ -196,19 +196,21 @@ read_local_memory (task_t remote_task,
 }
 `;
 
-const {getApi} = require('./api');
+import {getApi} from "./api";
 
 const {pointerSize} = Process;
 
-let cachedModule = null;
+interface Gonzales {
+    [name: string]: AnyFunction;
+}
 
-module.exports = {
-    get() {
-        if (cachedModule === null)
-            cachedModule = compileModule();
-        return cachedModule;
-    },
-};
+let cachedModule: Gonzales | null = null;
+
+export function getGonzales(): Gonzales {
+    if (cachedModule === null)
+        cachedModule = compileModule();
+    return cachedModule;
+}
 
 function compileModule() {
     const api = getApi();
@@ -217,7 +219,7 @@ function compileModule() {
     selfTask.writeU32(Module.getExportByName(null, 'mach_task_self_').readU32());
 
     const cm = new CModule(code, {
-        objc_getClassList: api.objc_getClassList,
+        objc_getClassList: api!.objc_getClassList,
         selfTask: selfTask,
     });
 
@@ -225,11 +227,11 @@ function compileModule() {
     const _destroy = new NativeFunction(cm.destroy, 'void', ['pointer']);
 
     return {
-        choose(klass, considerSubclasses) {
+        choose(klass: NativePointer, considerSubclasses?: boolean) {
             const result = [];
 
             const countPtr = Memory.alloc(4);
-            const matches = _choose(klass, considerSubclasses ? 1 : 0, countPtr);
+            const matches = <NativePointer> _choose(klass, considerSubclasses ? 1 : 0, countPtr);
             try {
                 const count = countPtr.readU32();
                 for (let i = 0; i !== count; i++)
