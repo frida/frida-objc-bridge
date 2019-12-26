@@ -23,10 +23,10 @@ function Runtime() {
     let cachedNSNumberCtor = null;
     let cachedNSNumberBoolean = null;
     let cachedNSNumberBooleanCtor = null;
-    let cachedNSArray = null;
-    let cachedNSArrayCtor = null;
-    let cachedNSDictionary = null;
-    let cachedNSDictionaryCtor = null;
+    let cachedNSMutableArray = null;
+    let cachedNSMutableArrayCtor = null;
+    let cachedNSMutableDictionary = null;
+    let cachedNSMutableDictionaryCtor = null;
     let cachedNSDate = null;
     let cachedNSDateCtor = null;
     let cachedNSData = null;
@@ -461,11 +461,11 @@ function Runtime() {
             if (cachedNSString === null) {
                 cachedNSString = classRegistry.NSString;
             }
-            if (cachedNSArray === null) {
-                cachedNSArray = classRegistry.NSArray;
+            if (cachedNSMutableArray === null) {
+                cachedNSMutableArray = classRegistry.NSMutableArray;
             }
-            if (cachedNSDictionary === null) {
-                cachedNSDictionary = classRegistry.NSDictionary;
+            if (cachedNSMutableDictionary === null) {
+                cachedNSMutableDictionary = classRegistry.NSMutableDictionary;
             }
             if (cachedNSDate === null) {
                 cachedNSDate = classRegistry.NSDate;
@@ -487,7 +487,7 @@ function Runtime() {
                 const toStringImpl = o.UTF8String;
                 return toStringImpl.call(o);
             }
-            else if (cachedIsKindOfClass.call(o, cachedNSArray)) {
+            else if (cachedIsKindOfClass.call(o, cachedNSMutableArray)) {
                 const arr = [];
                 const count = o.count().valueOf();
                 const objectAtIndexImpl = o.objectAtIndex_;
@@ -497,7 +497,7 @@ function Runtime() {
                 }
                 return arr;
             }
-            else if (cachedIsKindOfClass.call(o, cachedNSDictionary)) {
+            else if (cachedIsKindOfClass.call(o, cachedNSMutableDictionary)) {
                 const dict = {};
                 const enumerator = o.keyEnumerator();
                 const objectForKeyImpl = o.objectForKey_;
@@ -2424,13 +2424,13 @@ function Runtime() {
         }
         else if (type === 'object') {
             if (v.constructor === Array) {
-                if (cachedNSArray === null) {
-                    cachedNSArray = classRegistry.NSMutableArray;
+                if (cachedNSMutableArray === null) {
+                    cachedNSMutableArray = classRegistry.NSMutableArray;
                 }
-                if (cachedNSArrayCtor === null) {
-                    cachedNSArrayCtor = cachedNSArray.array;
+                if (cachedNSMutableArrayCtor === null) {
+                    cachedNSMutableArrayCtor = cachedNSMutableArray.array;
                 }
-                let array = cachedNSArrayCtor.call(cachedNSArray);
+                let array = cachedNSMutableArrayCtor.call(cachedNSMutableArray);
                 let arrayAddObject = array.addObject_;
                 for (let i = 0; i < v.length; i++) {
                     arrayAddObject.call(array, toNativeId(v[i], true));
@@ -2438,13 +2438,13 @@ function Runtime() {
                 return array;
             }
             else if (v.constructor === Object) {
-                if (cachedNSDictionary === null) {
-                    cachedNSDictionary = classRegistry.NSMutableDictionary;
+                if (cachedNSMutableDictionary === null) {
+                    cachedNSMutableDictionary = classRegistry.NSMutableDictionary;
                 }
-                if (cachedNSDictionaryCtor === null) {
-                    cachedNSDictionaryCtor = cachedNSDictionary.dictionary;
+                if (cachedNSMutableDictionaryCtor === null) {
+                    cachedNSMutableDictionaryCtor = cachedNSMutableDictionary.dictionary;
                 }
-                let dict = cachedNSDictionaryCtor.call(cachedNSDictionary);
+                let dict = cachedNSMutableDictionaryCtor.call(cachedNSMutableDictionary);
                 let dictSetObjectForKey = dict.setObject_forKey_;
                 for (const key in v) {
                     if (v.hasOwnProperty(key)) {
