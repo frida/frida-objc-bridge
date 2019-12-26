@@ -23,6 +23,8 @@ function Runtime() {
     let cachedNSNumberCtor = null;
     let cachedNSNumberBoolean = null;
     let cachedNSNumberBooleanCtor = null;
+    let cachedNSArray = null;
+    let cachedNSDictionary = null;
     let cachedNSMutableArray = null;
     let cachedNSMutableArrayCtor = null;
     let cachedNSMutableDictionary = null;
@@ -461,11 +463,11 @@ function Runtime() {
             if (cachedNSString === null) {
                 cachedNSString = classRegistry.NSString;
             }
-            if (cachedNSMutableArray === null) {
-                cachedNSMutableArray = classRegistry.NSMutableArray;
+            if (cachedNSArray === null) {
+                cachedNSArray = classRegistry.NSArray;
             }
-            if (cachedNSMutableDictionary === null) {
-                cachedNSMutableDictionary = classRegistry.NSMutableDictionary;
+            if (cachedNSDictionary === null) {
+                cachedNSDictionary = classRegistry.NSDictionary;
             }
             if (cachedNSDate === null) {
                 cachedNSDate = classRegistry.NSDate;
@@ -487,7 +489,7 @@ function Runtime() {
                 const toStringImpl = o.UTF8String;
                 return toStringImpl.call(o);
             }
-            else if (cachedIsKindOfClass.call(o, cachedNSMutableArray)) {
+            else if (cachedIsKindOfClass.call(o, cachedNSArray)) {
                 const arr = [];
                 const count = o.count().valueOf();
                 const objectAtIndexImpl = o.objectAtIndex_;
@@ -497,7 +499,7 @@ function Runtime() {
                 }
                 return arr;
             }
-            else if (cachedIsKindOfClass.call(o, cachedNSMutableDictionary)) {
+            else if (cachedIsKindOfClass.call(o, cachedNSDictionary)) {
                 const dict = {};
                 const enumerator = o.keyEnumerator();
                 const objectForKeyImpl = o.objectForKey_;
