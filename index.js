@@ -30,6 +30,7 @@ function Runtime() {
     let cachedNSDate = null;
     let cachedNSDateCtor = null;
     let cachedNSData = null;
+    let cachedNSNull = null;
     let cachedNSNullInstance = null;
     let singularTypeById = null;
     const PRIV = Symbol('priv');
@@ -472,6 +473,9 @@ function Runtime() {
             if (cachedNSData === null) {
                 cachedNSData = classRegistry.NSData;
             }
+            if (cachedNSNull === null) {
+                cachedNSNull = classRegistry.NSNull;
+            }
             if (cachedIsKindOfClass === null) {
                 cachedIsKindOfClass = classRegistry.NSObject.isKindOfClass_;
             }
@@ -509,6 +513,9 @@ function Runtime() {
             }
             else if (cachedIsKindOfClass.call(o, cachedNSData)) {
                 return o.bytes().readByteArray(o.length());
+            }
+            else if (cachedIsKindOfClass.call(o, cachedNSNull)) {
+                return null;
             }
 
             return o.toString();

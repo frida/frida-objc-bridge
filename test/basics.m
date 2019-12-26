@@ -26,7 +26,7 @@ TESTLIST_BEGIN (basics)
   TESTENTRY (object_can_be_constructed_from_pointer)
   TESTENTRY (string_can_be_constructed)
   TESTENTRY (string_can_be_passed_as_argument)
-  TESTENTRY (plain_object_can_be_passed_as_argument)
+  TESTENTRY (object_can_be_passed_as_argument)
   TESTENTRY (class_can_be_implemented)
 
   TESTGROUP_BEGIN ("Block")
@@ -351,7 +351,7 @@ TESTCASE (string_can_be_passed_as_argument)
   EXPECT_SEND_MESSAGE_WITH ("\"SnakesMushrooms\"");
 }
 
-TESTCASE (plain_object_can_be_passed_as_argument)
+TESTCASE (object_can_be_passed_as_argument)
 {
   COMPILE_AND_LOAD_SCRIPT (
       "var NSMutableDictionary = ObjC.classes.NSMutableDictionary;"
