@@ -32,6 +32,7 @@ function Runtime() {
     let cachedNSDate = null;
     let cachedNSDateCtor = null;
     let cachedNSData = null;
+    let cachedNSDataCtor = null;
     let cachedNSNull = null;
     let cachedNSNullInstance = null;
     let singularTypeById = null;
@@ -2425,7 +2426,28 @@ function Runtime() {
             return cachedNSNumberBooleanCtor.call(cachedNSNumberBoolean, v);
         }
         else if (type === 'object') {
-            if (v.constructor === Array) {
+            // RegExp and URL are not supported
+            if (v.constructor === Date) {
+                if (cachedNSDate === null) {
+                    cachedNSDate = classRegistry.NSDate;
+                }
+                if (cachedNSDateCtor === null) {
+                    cachedNSDateCtor = cachedNSDate.dateWithTimeIntervalSince1970_;
+                }
+                return cachedNSDateCtor.call(cachedNSDate, v.getTime());
+            }
+            else if (v.constructor === ArrayBuffer) {
+                if (cachedNSData === null) {
+                    cachedNSData = classRegistry.NSData;
+                }
+                if (cachedNSDataCtor === null) {
+                    cachedNSDataCtor = cachedNSData.dataWithBytes_length_;
+                }
+                let buf = Memory.alloc(v.byteLength);
+                buf.writeByteArray(v);
+                return cachedNSDataCtor.call(cachedNSData, buf, v.byteLength);
+            }
+            else if (v.constructor === Array) {
                 if (cachedNSMutableArray === null) {
                     cachedNSMutableArray = classRegistry.NSMutableArray;
                 }
@@ -2455,15 +2477,6 @@ function Runtime() {
                     }
                 }
                 return dict;
-            }
-            else if (v.constructor === Date) {
-                if (cachedNSDate === null) {
-                    cachedNSDate = classRegistry.NSDate;
-                }
-                if (cachedNSDateCtor === null) {
-                    cachedNSDateCtor = cachedNSDate.dateWithTimeIntervalSince1970_;
-                }
-                return cachedNSDateCtor.call(cachedNSDate, v.getTime());
             }
         }
 
