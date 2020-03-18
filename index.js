@@ -1338,10 +1338,10 @@ function Runtime() {
         enumerable: true,
         get: function () {
             const priv = this[PRIV];
-            const address = this.handle.add(blockOffsets.invoke).readPointer();
+            const address = this.handle.add(blockOffsets.invoke).readPointer().strip();
             const signature = priv.signature;
             return makeBlockInvocationWrapper(this, signature, new NativeFunction(
-                address,
+                address.sign(),
                 signature.retType.type,
                 signature.argTypes.map(function (arg) { return arg.type; }),
                 priv.options));
@@ -1349,11 +1349,13 @@ function Runtime() {
         set: function (func) {
             const priv = this[PRIV];
             const signature = priv.signature;
-            priv.callback = new NativeCallback(
+            const callback = new NativeCallback(
                 makeBlockImplementationWrapper(this, signature, func),
                 signature.retType.type,
                 signature.argTypes.map(function (arg) { return arg.type; }));
-            this.handle.add(blockOffsets.invoke).writePointer(priv.callback);
+            priv.callback = callback;
+            const location = this.handle.add(blockOffsets.invoke);
+            location.writePointer(callback.strip().sign('ia', location));
         }
     });
 
