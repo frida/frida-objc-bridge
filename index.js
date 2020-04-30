@@ -330,19 +330,16 @@ function Runtime() {
                 return false;
             },
             ownKeys(target) {
-                const protocolNames = [];
-                cachedProtocols = {};
-
                 const numProtocolsBuf = Memory.alloc(pointerSize);
                 const protocolHandles = api.objc_copyProtocolList(numProtocolsBuf);
                 try {
                     const numProtocols = numProtocolsBuf.readUInt();
                     if (numProtocols !== numCachedProtocols) {
+                        cachedProtocols = {};
                         for (let i = 0; i !== numProtocols; i++) {
                             const handle = protocolHandles.add(i * pointerSize).readPointer();
                             const name = api.protocol_getName(handle).readUtf8String();
 
-                            protocolNames.push(name);
                             cachedProtocols[name] = handle;
 
                             // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
@@ -353,8 +350,7 @@ function Runtime() {
                 } finally {
                     api.free(protocolHandles);
                 }
-
-                return protocolNames;
+                return Object.keys(cachedProtocols);
             },
             getOwnPropertyDescriptor(target, property) {
                 return {

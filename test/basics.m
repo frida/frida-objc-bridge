@@ -9,6 +9,7 @@
 
 TESTLIST_BEGIN (basics)
   TESTENTRY (classes_can_be_enumerated)
+  TESTENTRY (protocols_can_be_enumerated)
   TESTENTRY (object_enumeration_should_contain_parent_methods)
   TESTENTRY (object_enumeration_should_contain_protocol_methods)
   TESTENTRY (class_enumeration_should_not_contain_instance_methods)
@@ -104,6 +105,25 @@ TESTCASE (classes_can_be_enumerated)
       "send(count === numClasses);"
       "var numClassesNow = Object.keys(ObjC.classes).length;"
       "send(numClassesNow === numClasses);");
+  EXPECT_SEND_MESSAGE_WITH ("true");
+  EXPECT_SEND_MESSAGE_WITH ("true");
+  EXPECT_SEND_MESSAGE_WITH ("true");
+}
+
+TESTCASE (protocols_can_be_enumerated)
+{
+  COMPILE_AND_LOAD_SCRIPT (
+      "var numProtocols = Object.keys(ObjC.protocols).length;"
+      "send(numProtocols > 100);"
+      "var count = 0;"
+      "for (var protocolName in ObjC.protocols) {"
+        "if (ObjC.protocols.hasOwnProperty(protocolName)) {"
+          "count++;"
+        "}"
+      "}"
+      "send(count === numProtocols);"
+      "var numProtocolsNow = Object.keys(ObjC.protocols).length;"
+      "send(numProtocolsNow === numProtocols);");
   EXPECT_SEND_MESSAGE_WITH ("true");
   EXPECT_SEND_MESSAGE_WITH ("true");
   EXPECT_SEND_MESSAGE_WITH ("true");
