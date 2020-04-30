@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2019 Ole André Vadla Ravnås <oleavr@nowsecure.com>
+ * Copyright (C) 2015-2020 Ole André Vadla Ravnås <oleavr@nowsecure.com>
  *
  * Licence: wxWindows Library Licence, Version 3.1
  */
@@ -101,7 +101,10 @@ TESTCASE (classes_can_be_enumerated)
           "count++;"
         "}"
       "}"
-      "send(count === numClasses);");
+      "send(count === numClasses);"
+      "var numClassesNow = Object.keys(ObjC.classes).length;"
+      "send(numClassesNow === numClasses);");
+  EXPECT_SEND_MESSAGE_WITH ("true");
   EXPECT_SEND_MESSAGE_WITH ("true");
   EXPECT_SEND_MESSAGE_WITH ("true");
 }
