@@ -28,7 +28,6 @@ function Runtime() {
     try {
         tryInitialize();
     } catch (e) {
-        Script.nextTick(() => { throw e; });
     }
 
     function tryInitialize() {
