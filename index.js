@@ -5,7 +5,8 @@ const gonzales = require('./lib/gonzales');
 
 function Runtime() {
     const pointerSize = Process.pointerSize;
-    const api = getApi();
+    let api = null;
+    let apiError = null;
     const realizedClasses = new Set([]);
     const classRegistry = new ClassRegistry();
     const protocolRegistry = new ProtocolRegistry();
@@ -24,12 +25,33 @@ function Runtime() {
     let singularTypeById = null;
     const PRIV = Symbol('priv');
 
-    const available = api !== null;
+    try {
+        tryInitialize();
+    } catch (e) {
+        Script.nextTick(() => { throw e; });
+    }
+
+    function tryInitialize() {
+      if (api !== null)
+          return true;
+
+      if (apiError !== null)
+          throw apiError;
+
+      try {
+          api = getApi();
+      } catch (e) {
+          apiError = e;
+          throw e;
+      }
+
+      return true;
+    }
 
     Object.defineProperty(this, 'available', {
         enumerable: true,
         get: function () {
-            return available;
+            return tryInitialize();
         }
     });
 
@@ -42,12 +64,12 @@ function Runtime() {
 
     Object.defineProperty(this, 'classes', {
         enumerable: true,
-        value: available ? classRegistry : {}
+        value: classRegistry
     });
 
     Object.defineProperty(this, 'protocols', {
         enumerable: true,
-        value: available ? protocolRegistry : {}
+        value: protocolRegistry
     });
 
     Object.defineProperty(this, 'Object', {
@@ -1974,25 +1996,21 @@ function Runtime() {
         return result;
     }
 
-    if (available) {
-        const {readPointer} = Memory;
+    const isaMasks = {
+        x64: '0x7ffffffffff8',
+        arm64: '0xffffffff8'
+    };
 
-        const isaMasks = {
-            x64: '0x7ffffffffff8',
-            arm64: '0xffffffff8'
+    const rawMask = isaMasks[Process.arch];
+    if (rawMask !== undefined) {
+        const mask = ptr(rawMask);
+        readObjectIsa = function (p) {
+            return p.readPointer().and(mask);
         };
-
-        const rawMask = isaMasks[Process.arch];
-        if (rawMask !== undefined) {
-            const mask = ptr(rawMask);
-            readObjectIsa = function (p) {
-                return readPointer(p).and(mask);
-            };
-        } else {
-            readObjectIsa = function (p) {
-                return readPointer(p);
-            };
-        }
+    } else {
+        readObjectIsa = function (p) {
+            return p.readPointer();
+        };
     }
 
     function getMsgSendImpl(signature, invocationOptions) {
