@@ -44,7 +44,7 @@ function Runtime() {
           throw e;
       }
 
-      return true;
+      return api !== null;
     }
 
     Object.defineProperty(this, 'available', {
