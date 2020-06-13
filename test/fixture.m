@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2019 Ole André Vadla Ravnås <oleavr@nowsecure.com>
+ * Copyright (C) 2010-2020 Ole André Vadla Ravnås <oleavr@nowsecure.com>
  * Copyright (C) 2013 Karl Trygve Kalleberg <karltk@boblycat.org>
  *
  * Licence: wxWindows Library Licence, Version 3.1
@@ -7,7 +7,7 @@
 
 #include "fixture.h"
 
-#include <frida-gumjs.h>
+#include <Block.h>
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 

@@ -23,7 +23,6 @@ function Runtime() {
     let cachedNSNumber = null;
     let cachedNSNumberCtor = null;
     let singularTypeById = null;
-    const PRIV = Symbol('priv');
 
     try {
         tryInitialize();
@@ -1299,10 +1298,7 @@ function Runtime() {
     const BLOCK_HAS_SIGNATURE =    (1 << 30);
 
     function Block(target, options = defaultInvocationOptions) {
-        const priv = {
-            options,
-        };
-        this[PRIV] = priv;
+        this._options = options;
 
         if (target instanceof NativePointer) {
             const descriptor = target.add(blockOffsets.descriptor).readPointer();
@@ -1313,23 +1309,16 @@ function Runtime() {
             if ((flags & BLOCK_HAS_SIGNATURE) !== 0) {
                 const signatureOffset = ((flags & BLOCK_HAS_COPY_DISPOSE) !== 0) ? 2 : 0;
                 this.types = descriptor.add(blockDescriptorOffsets.rest + (signatureOffset * pointerSize)).readPointer().readCString();
-                priv.signature = parseSignature(this.types);
+                this._signature = parseSignature(this.types);
+            } else {
+                this._signature = null;
             }
         } else {
-            if (!(typeof target === 'object' &&
-                    (target.hasOwnProperty('types') || (target.hasOwnProperty('retType') && target.hasOwnProperty('argTypes'))) &&
-                    target.hasOwnProperty('implementation'))) {
-                throw new Error('Expected type metadata and implementation');
-            }
-
-            let types = target.types;
-            if (types === undefined) {
-                types = unparseSignature(target.retType, ['block'].concat(target.argTypes));
-            }
+            this.provideSignature(target);
 
             const descriptor = Memory.alloc(blockDescriptorAllocSize + blockSize);
             const block = descriptor.add(blockDescriptorAllocSize);
-            const typesStr = Memory.allocUtf8String(types);
+            const typesStr = Memory.allocUtf8String(this.types);
 
             descriptor.add(blockDescriptorOffsets.reserved).writeULong(0);
             descriptor.add(blockDescriptorOffsets.size).writeULong(blockDescriptorDeclaredSize);
@@ -1342,38 +1331,53 @@ function Runtime() {
 
             this.handle = block;
 
-            priv.descriptor = descriptor;
-            this.types = types;
-            priv.typesStr = typesStr;
-            priv.signature = parseSignature(types);
+            this._storage = [descriptor, typesStr];
 
             this.implementation = target.implementation;
         }
     }
 
-    Object.defineProperty(Block.prototype, 'implementation', {
+    Object.defineProperties(Block.prototype, {
+      implementation: {
         enumerable: true,
         get: function () {
-            const priv = this[PRIV];
             const address = this.handle.add(blockOffsets.invoke).readPointer().strip();
-            const signature = priv.signature;
+            const signature = this._getSignature();
             return makeBlockInvocationWrapper(this, signature, new NativeFunction(
                 address.sign(),
                 signature.retType.type,
                 signature.argTypes.map(function (arg) { return arg.type; }),
-                priv.options));
+                this._options));
         },
         set: function (func) {
-            const priv = this[PRIV];
-            const signature = priv.signature;
+            const signature = this._getSignature();
             const callback = new NativeCallback(
                 makeBlockImplementationWrapper(this, signature, func),
                 signature.retType.type,
                 signature.argTypes.map(function (arg) { return arg.type; }));
-            priv.callback = callback;
+            this._callback = callback;
             const location = this.handle.add(blockOffsets.invoke);
             location.writePointer(callback.strip().sign('ia', location));
         }
+      },
+      provideSignature: {
+        value(signature) {
+            let types = signature.types;
+            if (types === undefined) {
+                types = unparseSignature(signature.retType, ['block'].concat(signature.argTypes));
+            }
+            this.types = types;
+            this._signature = parseSignature(types);
+        }
+      },
+      _getSignature: {
+        value() {
+            const signature = this._signature;
+            if (signature === null)
+                throw new Error('block is missing signature; call provideSignature()');
+            return signature;
+        }
+      }
     });
 
     function collectProtocols(p, acc) {

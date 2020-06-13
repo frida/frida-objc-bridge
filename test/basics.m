@@ -34,6 +34,7 @@ TESTLIST_BEGIN (basics)
     TESTENTRY (block_can_be_invoked)
     TESTENTRY (block_can_be_traced_while_invoked)
     TESTENTRY (block_can_be_migrated_to_the_heap_behind_our_back)
+    TESTENTRY (block_without_signature_can_be_used_after_providing_one)
   TESTGROUP_END ()
 
   TESTENTRY (basic_method_implementation_can_be_overridden)
@@ -526,6 +527,81 @@ TESTCASE (block_can_be_migrated_to_the_heap_behind_our_back)
   EXPECT_SEND_MESSAGE_WITH ("false");
   EXPECT_SEND_MESSAGE_WITH ("[1340,null]");
   g_assert_cmpint (calls, ==, 1);
+}
+
+typedef struct _TestBlock TestBlock;
+typedef struct _TestBlockSignature TestBlockSignature;
+
+struct _TestBlock
+{
+  void * isa;
+  int flags;
+  int reserved;
+  void (* invoke) (TestBlock * block, int value);
+  TestBlockSignature * signature;
+
+  int last_seen_value;
+};
+
+struct _TestBlockSignature
+{
+  unsigned long int reserved;
+  unsigned long int size;
+};
+
+static void test_block_invoke (TestBlock * block, int value);
+
+TESTCASE (block_without_signature_can_be_used_after_providing_one)
+{
+  TestBlock block;
+  TestBlockSignature block_signature;
+
+  block.isa = _NSConcreteStackBlock;
+  block.flags = 0;
+  block.reserved = 0;
+  block.invoke = test_block_invoke;
+  block.signature = &block_signature;
+  block.last_seen_value = -1;
+
+  block_signature.reserved = 0;
+  block_signature.size = sizeof (TestBlock);
+
+  COMPILE_AND_LOAD_SCRIPT (
+      "var block = new ObjC.Block(" GUM_PTR_CONST ");"
+      "block.implementation(42);",
+      &block);
+  EXPECT_ERROR_MESSAGE_WITH (ANY_LINE_NUMBER,
+      "Error: block is missing signature; call provideSignature()");
+  g_assert_cmpint (block.last_seen_value, ==, -1);
+
+  COMPILE_AND_LOAD_SCRIPT (
+      "var block = new ObjC.Block(" GUM_PTR_CONST ");"
+      "send(typeof block.types);"
+      "block.provideSignature({ retType: 'void', argTypes: ['int'] });"
+      "send(block.types);"
+      "block.implementation(42);",
+      &block);
+  EXPECT_SEND_MESSAGE_WITH ("\"undefined\"");
+  EXPECT_SEND_MESSAGE_WITH ("\"v12@?0i8\"");
+  EXPECT_NO_MESSAGES ();
+  g_assert_cmpint (block.last_seen_value, ==, 42);
+
+  COMPILE_AND_LOAD_SCRIPT (
+      "var block = new ObjC.Block(" GUM_PTR_CONST ");"
+      "block.provideSignature({ types: 'v12@?0i8' });"
+      "send(block.types);"
+      "block.implementation(24);",
+      &block);
+  EXPECT_SEND_MESSAGE_WITH ("\"v12@?0i8\"");
+  EXPECT_NO_MESSAGES ();
+  g_assert_cmpint (block.last_seen_value, ==, 24);
+}
+
+static void
+test_block_invoke (TestBlock * block,
+                   int value)
+{
+  block->last_seen_value = value;
 }
 
 TESTCASE (basic_method_implementation_can_be_overridden)
