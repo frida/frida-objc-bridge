@@ -2090,10 +2090,17 @@ function Runtime() {
     }
 
     function unparseSignature(retType, argTypes) {
-        const frameSize = argTypes.length * pointerSize;
-        return typeIdFromAlias(retType) + frameSize + argTypes.map(function (argType, i) {
-            const frameOffset = (i * pointerSize);
-            return typeIdFromAlias(argType) + frameOffset;
+        const retTypeId = typeIdFromAlias(retType);
+        const argTypeIds = argTypes.map(typeIdFromAlias);
+
+        const argSizes = argTypeIds.map(id => singularTypeById[id].size);
+        const frameSize = argSizes.reduce((total, size) => total + size, 0);
+
+        let frameOffset = 0;
+        return retTypeId + frameSize + argTypeIds.map((id, i) => {
+            const result = id + frameOffset;
+            frameOffset += argSizes[i];
+            return result;
         }).join("");
     }
 
