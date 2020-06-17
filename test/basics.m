@@ -34,7 +34,7 @@ TESTLIST_BEGIN (basics)
     TESTENTRY (block_can_be_invoked)
     TESTENTRY (block_can_be_traced_while_invoked)
     TESTENTRY (block_can_be_migrated_to_the_heap_behind_our_back)
-    TESTENTRY (block_without_signature_can_be_used_after_providing_one)
+    TESTENTRY (block_without_signature_can_be_used_after_calling_declare)
   TESTGROUP_END ()
 
   TESTENTRY (basic_method_implementation_can_be_overridden)
@@ -571,7 +571,7 @@ struct _TestBlockSignature
 
 static void test_block_invoke (TestBlock * block, int value);
 
-TESTCASE (block_without_signature_can_be_used_after_providing_one)
+TESTCASE (block_without_signature_can_be_used_after_calling_declare)
 {
   TestBlock block;
   TestBlockSignature block_signature;
@@ -591,13 +591,13 @@ TESTCASE (block_without_signature_can_be_used_after_providing_one)
       "block.implementation(42);",
       &block);
   EXPECT_ERROR_MESSAGE_WITH (ANY_LINE_NUMBER,
-      "Error: block is missing signature; call provideSignature()");
+      "Error: block is missing signature; call declare()");
   g_assert_cmpint (block.last_seen_value, ==, -1);
 
   COMPILE_AND_LOAD_SCRIPT (
       "var block = new ObjC.Block(" GUM_PTR_CONST ");"
       "send(typeof block.types);"
-      "block.provideSignature({ retType: 'void', argTypes: ['int'] });"
+      "block.declare({ retType: 'void', argTypes: ['int'] });"
       "send(block.types);"
       "block.implementation(42);",
       &block);
@@ -608,7 +608,7 @@ TESTCASE (block_without_signature_can_be_used_after_providing_one)
 
   COMPILE_AND_LOAD_SCRIPT (
       "var block = new ObjC.Block(" GUM_PTR_CONST ");"
-      "block.provideSignature({ types: 'v12@?0i8' });"
+      "block.declare({ types: 'v12@?0i8' });"
       "send(block.types);"
       "block.implementation(24);",
       &block);

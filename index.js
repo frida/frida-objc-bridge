@@ -1314,7 +1314,7 @@ function Runtime() {
                 this._signature = null;
             }
         } else {
-            this.provideSignature(target);
+            this.declare(target);
 
             const descriptor = Memory.alloc(blockDescriptorAllocSize + blockSize);
             const block = descriptor.add(blockDescriptorAllocSize);
@@ -1360,7 +1360,7 @@ function Runtime() {
             location.writePointer(callback.strip().sign('ia', location));
         }
       },
-      provideSignature: {
+      declare: {
         value(signature) {
             let types = signature.types;
             if (types === undefined) {
@@ -1374,7 +1374,7 @@ function Runtime() {
         value() {
             const signature = this._signature;
             if (signature === null)
-                throw new Error('block is missing signature; call provideSignature()');
+                throw new Error('block is missing signature; call declare()');
             return signature;
         }
       }
