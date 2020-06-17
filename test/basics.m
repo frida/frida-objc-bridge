@@ -63,6 +63,7 @@ TESTLIST_END ()
 @protocol FridaCalculator
 - (int)add:(int)value;
 - (void)add:(int)value completion:(void (^)(int, NSError *))block;
+- (void)addSquared:(int)value completion:(void (^)(int, void *))block;
 - (int)sub:(int)value;
 @optional
 - (int)magic;
@@ -85,7 +86,12 @@ TESTLIST_END ()
 - (int)add:(int)value { return 1337 + value; }
 - (void)add:(int)value completion:(void (^)(int, NSError *))block {
   dispatch_async (dispatch_get_global_queue (DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    block(1337 + value, nil);
+    block (1337 + value, nil);
+  });
+}
+- (void)addSquared:(int)value completion:(void (^)(int, void *))block {
+  dispatch_async (dispatch_get_global_queue (DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    block (1337 + (value * value), GSIZE_TO_POINTER (0x42));
   });
 }
 - (int)sub:(int)value { return 1337 - value; }
@@ -438,6 +444,20 @@ TESTCASE (block_can_be_implemented)
       "calc.add_completion_(3, onComplete);",
       calc);
   EXPECT_SEND_MESSAGE_WITH ("[1340,null]");
+  EXPECT_NO_MESSAGES ();
+
+  COMPILE_AND_LOAD_SCRIPT (
+      "var calc = new ObjC.Object(" GUM_PTR_CONST ");"
+      "var onComplete = new ObjC.Block({"
+          "retType: 'void',"
+          "argTypes: ['int', 'pointer'],"
+          "implementation: function (result, data) {"
+              "send([result, data]);"
+          "}"
+      "});"
+      "calc.addSquared_completion_(7, onComplete);",
+      calc);
+  EXPECT_SEND_MESSAGE_WITH ("[1386,\"0x42\"]");
   EXPECT_NO_MESSAGES ();
 }
 

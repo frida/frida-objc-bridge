@@ -2627,6 +2627,12 @@ function Runtime() {
             write: (address, value) => { address.writePointer(value); },
             toNative: toNativeObjectArray
         },
+        '^v': {
+            type: 'pointer',
+            size: pointerSize,
+            read: address => address.readPointer(),
+            write: (address, value) => { address.writePointer(value); },
+        },
         '#': {
             type: 'pointer',
             size: pointerSize,
