@@ -1,7 +1,7 @@
 /* jshint esnext: true, evil: true */
 
 const {getApi, defaultInvocationOptions} = require('./lib/api');
-const gonzales = require('./lib/gonzales');
+const fastpaths = require('./lib/fastpaths');
 
 function Runtime() {
     const pointerSize = Process.pointerSize;
@@ -1724,7 +1724,7 @@ function Runtime() {
         if (!(cls instanceof ObjCObject && (cls.$kind === 'class' || cls.$kind === 'meta-class')))
             throw new Error("Expected an ObjC.Object for a class or meta-class");
 
-        const matches = gonzales.get()
+        const matches = fastpaths.get()
             .choose(cls, subclasses)
             .map(handle => new ObjCObject(handle));
         for (const match of matches) {
