@@ -258,9 +258,6 @@ function Runtime() {
                         const handle = classHandles.add(i * pointerSize).readPointer();
                         const name = api.class_getName(handle).readUtf8String();
                         cachedClasses[name] = handle;
-
-                        // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
-                        target[name] = true;
                     }
                     numCachedClasses = numClasses;
                 }
@@ -361,9 +358,6 @@ function Runtime() {
                             const name = api.protocol_getName(handle).readUtf8String();
 
                             cachedProtocols[name] = handle;
-
-                            // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
-                            target[name] = true;
                         }
                         numCachedProtocols = numProtocols;
                     }
@@ -661,9 +655,6 @@ function Runtime() {
                                     }
                                     jsNames[name] = true;
 
-                                    // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
-                                    target[name] = true;
-
                                     const fullName = fullNamePrefix + nativeName;
                                     if (cachedMethods[fullName] === undefined) {
                                         const details = {
@@ -691,9 +682,6 @@ function Runtime() {
                                 const details = protocolMethods[methodName];
                                 if (details.implemented) {
                                     methodNames.push(methodName);
-
-                                    // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
-                                    target[methodName] = true;
                                 }
                             }
                         });
@@ -1171,14 +1159,8 @@ function Runtime() {
                 return true;
             },
             ownKeys(target) {
-                if (cachedIvarNames === null) {
+                if (cachedIvarNames === null)
                     cachedIvarNames = Object.keys(ivars);
-                    cachedIvarNames.forEach(name => {
-                        // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
-                        target[name] = true;
-                    });
-                }
-
                 return cachedIvarNames;
             },
             getOwnPropertyDescriptor(target, property) {
