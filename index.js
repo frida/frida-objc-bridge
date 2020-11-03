@@ -1781,7 +1781,11 @@ function Runtime() {
             get: function () {
                 const h = getMethodHandle();
 
-                return new NativeFunction(api.method_getImplementation(h), m.returnType, m.argumentTypes, invocationOptions);
+                const impl = new NativeFunction(api.method_getImplementation(h), m.returnType, m.argumentTypes, invocationOptions);
+                if (newImp !== null)
+                    impl._callback = newImp;
+
+                return impl;
             },
             set: function (imp) {
                 const h = getMethodHandle();
