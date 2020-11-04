@@ -10,14 +10,15 @@ function Runtime() {
     const realizedClasses = new Set();
     const classRegistry = new ClassRegistry();
     const protocolRegistry = new ProtocolRegistry();
-    const scheduledWork = {};
+    const replacedMethods = new Map();
+    const scheduledWork = new Map();
     let nextId = 1;
     let workCallback = null;
     let NSAutoreleasePool = null;
-    const bindings = {};
+    const bindings = new Map();
     let readObjectIsa = null;
-    const msgSendBySignatureId = {};
-    const msgSendSuperBySignatureId = {};
+    const msgSendBySignatureId = new Map();
+    const msgSendSuperBySignatureId = new Map();
     let cachedNSString = null;
     let cachedNSStringCtor = null;
     let cachedNSNumber = null;
@@ -48,7 +49,7 @@ function Runtime() {
 
     Object.defineProperty(this, 'available', {
         enumerable: true,
-        get: function () {
+        get() {
             return tryInitialize();
         }
     });
@@ -87,7 +88,7 @@ function Runtime() {
 
     Object.defineProperty(this, 'mainQueue', {
         enumerable: true,
-        get: function () {
+        get() {
             return api._dispatch_main_q;
         }
     });
@@ -139,13 +140,13 @@ function Runtime() {
 
     Object.defineProperty(this, 'chooseSync', {
         enumerable: true,
-        value: function (specifier) {
+        value(specifier) {
             const instances = [];
             choose(specifier, {
-                onMatch: function (i) {
+                onMatch(i) {
                     instances.push(i);
                 },
-                onComplete: function () {
+                onComplete() {
                 }
             });
             return instances;
@@ -154,7 +155,7 @@ function Runtime() {
 
     this.schedule = function (queue, work) {
         const id = ptr(nextId++);
-        scheduledWork[id.toString()] = work;
+        scheduledWork.set(id.toString(), work);
 
         if (workCallback === null) {
             workCallback = new NativeCallback(performScheduledWorkItem, 'void', ['pointer']);
@@ -166,8 +167,8 @@ function Runtime() {
 
     function performScheduledWorkItem(rawId) {
         const id = rawId.toString();
-        const work = scheduledWork[id];
-        delete scheduledWork[id];
+        const work = scheduledWork.get(id);
+        scheduledWork.delete(id);
 
         if (NSAutoreleasePool === null)
             NSAutoreleasePool = classRegistry.NSAutoreleasePool;
@@ -877,7 +878,7 @@ function Runtime() {
                             types: method.types
                         };
                         Object.defineProperty(details, 'implemented', {
-                            get: function () {
+                            get() {
                                 if (!didCheckImplemented) {
                                     if (method.required) {
                                         implemented = true;
@@ -983,7 +984,7 @@ function Runtime() {
         });
 
         Object.defineProperty(this, 'name', {
-            get: function () {
+            get() {
                 if (cachedName === null)
                     cachedName = api.protocol_getName(handle).readUtf8String();
                 return cachedName;
@@ -992,7 +993,7 @@ function Runtime() {
         });
 
         Object.defineProperty(this, 'protocols', {
-            get: function () {
+            get() {
                 if (cachedProtocols === null) {
                     cachedProtocols = {};
                     const numProtocolsBuf = Memory.alloc(pointerSize);
@@ -1016,7 +1017,7 @@ function Runtime() {
         });
 
         Object.defineProperty(this, 'properties', {
-            get: function () {
+            get() {
                 if (cachedProperties === null) {
                     cachedProperties = {};
                     const numBuf = Memory.alloc(pointerSize);
@@ -1055,7 +1056,7 @@ function Runtime() {
         });
 
         Object.defineProperty(this, 'methods', {
-            get: function () {
+            get() {
                 if (cachedMethods === null) {
                     cachedMethods = {};
                     const numBuf = Memory.alloc(pointerSize);
@@ -1322,7 +1323,7 @@ function Runtime() {
     Object.defineProperties(Block.prototype, {
       implementation: {
         enumerable: true,
-        get: function () {
+        get() {
             const address = this.handle.add(blockOffsets.invoke).readPointer().strip();
             const signature = this._getSignature();
             return makeBlockInvocationWrapper(this, signature, new NativeFunction(
@@ -1331,7 +1332,7 @@ function Runtime() {
                 signature.argTypes.map(function (arg) { return arg.type; }),
                 this._options));
         },
-        set: function (func) {
+        set(func) {
             const signature = this._getSignature();
             const callback = new NativeCallback(
                 makeBlockImplementationWrapper(this, signature, func),
@@ -1592,16 +1593,16 @@ function Runtime() {
     function bind(obj, data) {
         const handle = getHandle(obj);
         const self = (obj instanceof ObjCObject) ? obj : new ObjCObject(handle);
-        bindings[handle.toString()] = {
+        bindings.set(handle.toString(), {
             self: self,
             super: self.$super,
             data: data
-        };
+        });
     }
 
     function unbind(obj) {
         const handle = getHandle(obj);
-        delete bindings[handle.toString()];
+        bindings.delete(handle.toString());
     }
 
     function getBoundData(obj) {
@@ -1611,7 +1612,7 @@ function Runtime() {
     function getBinding(obj) {
         const handle = getHandle(obj);
         const key = handle.toString();
-        let binding = bindings[key];
+        let binding = bindings.get(key);
         if (binding === undefined) {
             const self = (obj instanceof ObjCObject) ? obj : new ObjCObject(handle);
             binding = {
@@ -1619,7 +1620,7 @@ function Runtime() {
                 super: self.$super,
                 data: {}
             };
-            bindings[key] = binding;
+            bindings.set(key, binding);
         }
         return binding;
     }
@@ -1778,7 +1779,7 @@ function Runtime() {
 
         Object.defineProperty(m, 'implementation', {
             enumerable: true,
-            get: function () {
+            get() {
                 const h = getMethodHandle();
 
                 const impl = new NativeFunction(api.method_getImplementation(h), m.returnType, m.argumentTypes, invocationOptions);
@@ -1787,7 +1788,7 @@ function Runtime() {
 
                 return impl;
             },
-            set: function (imp) {
+            set(imp) {
                 const h = getMethodHandle();
 
                 if (oldImp === null)
@@ -2016,10 +2017,10 @@ function Runtime() {
 
         const {id} = signature;
 
-        let impl = cache[id];
+        let impl = cache.get(id);
         if (impl === undefined) {
             impl = makeMsgSendImpl(signature, invocationOptions, isSuper);
-            cache[id] = impl;
+            cache.set(id, impl);
         }
 
         return impl;
@@ -2362,7 +2363,7 @@ function Runtime() {
     function arrayType(length, elementType) {
         return {
             type: 'pointer',
-            read: function (address) {
+            read(address) {
                 const result = [];
 
                 const elementSize = elementType.size;
@@ -2372,7 +2373,7 @@ function Runtime() {
 
                 return result;
             },
-            write: function (address, values) {
+            write(address, values) {
                 const elementSize = elementType.size;
                 values.forEach((value, index) => {
                     elementType.write(address.add(index * elementSize), value);
@@ -2429,10 +2430,10 @@ function Runtime() {
         return {
             type: fieldTypes.map(t => t.type),
             size: totalSize,
-            read: function (address) {
+            read(address) {
                 return fieldTypes.map((type, index) => type.read(address.add(fieldOffsets[index])));
             },
-            write: function (address, values) {
+            write(address, values) {
                 values.forEach((value, index) => {
                     fieldTypes[index].write(address.add(fieldOffsets[index]), value);
                 });
@@ -2492,7 +2493,7 @@ function Runtime() {
             size: 1,
             read: address => address.readS8(),
             write: (address, value) => { address.writeS8(value); },
-            toNative: function (v) {
+            toNative(v) {
                 if (typeof v === 'boolean') {
                     return v ? 1 : 0;
                 }
@@ -2570,10 +2571,10 @@ function Runtime() {
             size: 1,
             read: address => address.readU8(),
             write: (address, value) => { address.writeU8(value); },
-            fromNative: function (v) {
+            fromNative(v) {
                 return v ? true : false;
             },
-            toNative: function (v) {
+            toNative(v) {
                 return v ? 1 : 0;
             }
         },
@@ -2586,7 +2587,7 @@ function Runtime() {
             size: pointerSize,
             read: address => address.readPointer(),
             write: (address, value) => { address.writePointer(value); },
-            fromNative: function (h) {
+            fromNative(h) {
                 return h.readUtf8String();
             }
         },
