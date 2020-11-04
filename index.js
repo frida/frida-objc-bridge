@@ -50,8 +50,9 @@ function Runtime() {
     function dispose() {
         for (const [rawMethodHandle, impls] of replacedMethods.entries()) {
             const methodHandle = ptr(rawMethodHandle);
-            const [oldImp] = impls;
-            api.method_setImplementation(methodHandle, oldImp);
+            const [oldImp, newImp] = impls;
+            if (api.method_getImplementation(methodHandle).equals(newImp))
+                api.method_setImplementation(methodHandle, oldImp);
         }
         replacedMethods.clear();
     }
@@ -910,19 +911,10 @@ function Runtime() {
                 return null;
             let wrapper = method.wrapper;
             if (wrapper === null) {
-                wrapper = makeMethodInvocationWrapper(method, self, superSpecifier, replaceMethodImplementation, defaultInvocationOptions);
+                wrapper = makeMethodInvocationWrapper(method, self, superSpecifier, defaultInvocationOptions);
                 method.wrapper = wrapper;
             }
             return wrapper;
-        }
-
-        function replaceMethodImplementation(methodHandle, imp, oldImp) {
-            api.method_setImplementation(methodHandle, imp);
-
-            if (!imp.equals(oldImp))
-                replacedMethods.set(methodHandle.toString(), [oldImp, imp]);
-            else
-                replacedMethods.delete(methodHandle.toString());
         }
 
         function parseMethodName(rawName) {
@@ -948,6 +940,32 @@ function Runtime() {
         function equals(ptr) {
             return handle.equals(getHandle(ptr));
         }
+    }
+
+    function getReplacementMethodImplementation(methodHandle) {
+        const existingEntry = replacedMethods.get(methodHandle.toString());
+        if (existingEntry === undefined)
+            return null;
+        const [, newImp] = existingEntry;
+        return newImp;
+    }
+
+    function replaceMethodImplementation(methodHandle, imp) {
+        const key = methodHandle.toString();
+
+        let oldImp;
+        const existingEntry = replacedMethods.get(key);
+        if (existingEntry !== undefined)
+            [oldImp] = existingEntry;
+        else
+            oldImp = api.method_getImplementation(methodHandle);
+
+        if (!imp.equals(oldImp))
+            replacedMethods.set(key, [oldImp, imp]);
+        else
+            replacedMethods.delete(key);
+
+        api.method_setImplementation(methodHandle, imp);
     }
 
     function collectMethodNames(klass, prefix) {
@@ -1717,7 +1735,7 @@ function Runtime() {
         callbacks.onComplete();
     }
 
-    function makeMethodInvocationWrapper(method, owner, superSpecifier, replaceImplementation, invocationOptions) {
+    function makeMethodInvocationWrapper(method, owner, superSpecifier, invocationOptions) {
         const sel = method.sel;
         let handle = method.handle;
         let types;
@@ -1761,9 +1779,6 @@ function Runtime() {
             returnCaptureRight = "";
         }
 
-        let oldImp = null;
-        let newImp = null;
-
         const m = eval("var m = function (" + argVariableNames.join(", ") + ") { " +
             returnCaptureLeft + "objc_msgSend(" + callArgs.join(", ") + ")" + returnCaptureRight + ";" +
         " }; m;");
@@ -1781,19 +1796,15 @@ function Runtime() {
                 const h = getMethodHandle();
 
                 const impl = new NativeFunction(api.method_getImplementation(h), m.returnType, m.argumentTypes, invocationOptions);
+
+                const newImp = getReplacementMethodImplementation(h);
                 if (newImp !== null)
                     impl._callback = newImp;
 
                 return impl;
             },
             set(imp) {
-                const h = getMethodHandle();
-
-                if (oldImp === null)
-                    oldImp = api.method_getImplementation(h);
-                newImp = imp;
-
-                replaceImplementation(h, imp, oldImp);
+                replaceMethodImplementation(getMethodHandle(), imp);
             }
         });
 
@@ -1804,7 +1815,7 @@ function Runtime() {
         m.types = types;
 
         m.clone = function (options) {
-            return makeMethodInvocationWrapper(method, owner, superSpecifier, replaceImplementation, options);
+            return makeMethodInvocationWrapper(method, owner, superSpecifier, options);
         };
 
         function getMethodHandle() {
