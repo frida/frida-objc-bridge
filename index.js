@@ -7,7 +7,7 @@ function Runtime() {
     const pointerSize = Process.pointerSize;
     let api = null;
     let apiError = null;
-    const realizedClasses = new Set([]);
+    const realizedClasses = new Set();
     const classRegistry = new ClassRegistry();
     const protocolRegistry = new ProtocolRegistry();
     const scheduledWork = {};
@@ -30,20 +30,20 @@ function Runtime() {
     }
 
     function tryInitialize() {
-      if (api !== null)
-          return true;
+        if (api !== null)
+            return true;
 
-      if (apiError !== null)
-          throw apiError;
+        if (apiError !== null)
+            throw apiError;
 
-      try {
-          api = getApi();
-      } catch (e) {
-          apiError = e;
-          throw e;
-      }
+        try {
+            api = getApi();
+        } catch (e) {
+            apiError = e;
+            throw e;
+        }
 
-      return api !== null;
+        return api !== null;
     }
 
     Object.defineProperty(this, 'available', {
