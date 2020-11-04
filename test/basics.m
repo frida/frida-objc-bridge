@@ -38,6 +38,7 @@ TESTLIST_BEGIN (basics)
   TESTGROUP_END ()
 
   TESTENTRY (basic_method_implementation_can_be_overridden)
+  TESTENTRY (method_replacement_should_stay_alive_independently_of_class_wrapper)
   TESTENTRY (struct_consuming_method_implementation_can_be_overridden)
   TESTENTRY (struct_returning_method_can_be_called)
   TESTENTRY (floating_point_returning_method_can_be_called)
@@ -635,6 +636,29 @@ TESTCASE (basic_method_implementation_can_be_overridden)
           "ObjC.implement(method, function (handle, selector) {"
               "return NSString.stringWithUTF8String_(Memory.allocUtf8String(\"Snakes\"));"
           "});");
+  EXPECT_NO_MESSAGES ();
+
+  NSString * desc = [str description];
+  EXPECT_NO_MESSAGES ();
+
+  g_assert_cmpstr (desc.UTF8String, ==, "Snakes");
+}
+
+TESTCASE (method_replacement_should_stay_alive_independently_of_class_wrapper)
+{
+  NSString * str = [NSString stringWithUTF8String:"Badger"];
+
+  COMPILE_AND_LOAD_SCRIPT (
+      "(() => {"
+          "var NSString = ObjC.classes.NSString;"
+          "var method = NSString[\"- description\"];"
+          "method.implementation ="
+              "ObjC.implement(method, function (handle, selector) {"
+                  "return NSString.stringWithUTF8String_("
+                      "Memory.allocUtf8String(\"Snakes\"));"
+              "});"
+      "})();"
+      "gc();");
   EXPECT_NO_MESSAGES ();
 
   NSString * desc = [str description];

@@ -47,6 +47,17 @@ function Runtime() {
         return api !== null;
     }
 
+    function dispose() {
+        for (const [rawMethodHandle, impls] of replacedMethods.entries()) {
+            const methodHandle = ptr(rawMethodHandle);
+            const [oldImp] = impls;
+            api.method_setImplementation(methodHandle, oldImp);
+        }
+        replacedMethods.clear();
+    }
+
+    WeakRef.bind(this, dispose);
+
     Object.defineProperty(this, 'available', {
         enumerable: true,
         get() {
@@ -447,11 +458,9 @@ function Runtime() {
         let cachedProtocolMethods = null;
         let respondsToSelector = null;
         const cachedMethods = {};
-        const replacedMethods = {};
         let cachedNativeMethodNames = null;
         let cachedOwnMethodNames = null;
         let cachedIvars = null;
-        let weakRef = null;
 
         handle = getHandle(handle);
 
@@ -718,14 +727,6 @@ function Runtime() {
             return findMethod(name) !== null;
         }
 
-        function dispose() {
-            Object.keys(replacedMethods).forEach(function (key) {
-                const methodHandle = ptr(key);
-                const oldImp = replacedMethods[key];
-                api.method_setImplementation(methodHandle, oldImp);
-            });
-        }
-
         function classHandle() {
             if (cachedClassHandle === null)
                 cachedClassHandle = isClass() ? handle : api.object_getClass(handle);
@@ -919,12 +920,9 @@ function Runtime() {
             api.method_setImplementation(methodHandle, imp);
 
             if (!imp.equals(oldImp))
-                replacedMethods[methodHandle.toString()] = oldImp;
+                replacedMethods.set(methodHandle.toString(), [oldImp, imp]);
             else
-                delete replacedMethods[methodHandle.toString()];
-
-            if (weakRef === null)
-                weakRef = WeakRef.bind(self, dispose);
+                replacedMethods.delete(methodHandle.toString());
         }
 
         function parseMethodName(rawName) {
