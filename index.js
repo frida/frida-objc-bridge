@@ -57,7 +57,7 @@ function Runtime() {
         replacedMethods.clear();
     }
 
-    WeakRef.bind(this, dispose);
+    Script.bindWeak(this, dispose);
 
     Object.defineProperty(this, 'available', {
         enumerable: true,
@@ -1533,7 +1533,7 @@ function Runtime() {
         // Keep a reference to the callbacks so they don't get GCed
         classHandle._methodCallbacks = methodCallbacks;
 
-        WeakRef.bind(classHandle, makeClassDestructor(ptr(classHandle)));
+        Script.bindWeak(classHandle, makeClassDestructor(ptr(classHandle)));
 
         return new ObjCObject(classHandle);
     }
