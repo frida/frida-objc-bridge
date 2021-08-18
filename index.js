@@ -1410,6 +1410,8 @@ function Runtime() {
                     callback.call(this);
             },
             '- respondsToSelector:': function (sel) {
+                if (selectorAsString(sel) in methods)
+                    return true;
                 return this.data.target.respondsToSelector_(sel);
             },
             '- forwardingTargetForSelector:': function (sel) {
