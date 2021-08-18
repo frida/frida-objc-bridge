@@ -45,6 +45,7 @@ TESTLIST_BEGIN (basics)
   TESTENTRY (attempt_to_read_inexistent_property_should_yield_undefined)
   TESTENTRY (proxied_method_can_be_invoked)
   TESTENTRY (proxied_method_can_be_overridden)
+  TESTENTRY (proxy_instance_responds_to_selector_for_optional_methods_works)
   TESTENTRY (methods_with_weird_names_can_be_invoked)
   TESTENTRY (method_call_preserves_value)
   TESTENTRY (method_call_can_be_traced)
@@ -837,6 +838,30 @@ TESTCASE (proxied_method_can_be_overridden)
   EXPECT_SEND_MESSAGE_WITH ("\"ready\"");
 
   g_assert_cmpint ([calc add:3], ==, 1230);
+}
+
+TESTCASE (proxy_instance_responds_to_selector_for_optional_methods_works)
+{
+  FridaDefaultCalculator * calc = [[[FridaDefaultCalculator alloc] init]
+      autorelease];
+
+  COMPILE_AND_LOAD_SCRIPT (
+      "var pool = ObjC.classes.NSAutoreleasePool.alloc().init();"
+      "var CalculatorProxy = ObjC.registerProxy({"
+        "protocols: [ObjC.protocols.FridaCalculator],"
+        "methods: {"
+          "'- magic': function () {"
+            "return 0xdeadbeef;"
+          "}"
+        "}"
+      "});"
+      "var calculatorProxy = new CalculatorProxy(" GUM_PTR_CONST ", {});"
+      "var calculator = new ObjC.Object(calculatorProxy);"
+      "var sel = ObjC.selector('- magic');"
+      "send(calculator.respondsToSelector_(sel));"
+      "pool.release();",
+      calc);
+  EXPECT_SEND_MESSAGE_WITH ("1");
 }
 
 @interface FridaTest1 : NSObject
