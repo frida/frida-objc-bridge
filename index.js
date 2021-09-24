@@ -1396,6 +1396,11 @@ function Runtime() {
         const protocols = properties.protocols || [];
         const methods = properties.methods || {};
         const events = properties.events || {};
+        const supportedSelectors = new Set(
+            Object.keys(methods)
+                .filter(m => /([+\-])\s(\S+)/.exec(m) !== null)
+                .map(m => m.split(' ')[1])
+        );
 
         const proxyMethods = {
             '- dealloc': function () {
@@ -1410,8 +1415,10 @@ function Runtime() {
                     callback.call(this);
             },
             '- respondsToSelector:': function (sel) {
-                if (selectorAsString(sel) in methods)
+                const selector = selectorAsString(sel);
+                if (supportedSelectors.has(selector))
                     return true;
+
                 return this.data.target.respondsToSelector_(sel);
             },
             '- forwardingTargetForSelector:': function (sel) {

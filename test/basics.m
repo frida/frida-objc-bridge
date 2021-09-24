@@ -857,7 +857,7 @@ TESTCASE (proxy_instance_responds_to_selector_for_optional_methods_works)
       "});"
       "var calculatorProxy = new CalculatorProxy(" GUM_PTR_CONST ", {});"
       "var calculator = new ObjC.Object(calculatorProxy);"
-      "var sel = ObjC.selector('- magic');"
+      "var sel = ObjC.selector('magic');"
       "send(calculator.respondsToSelector_(sel));"
       "pool.release();",
       calc);
