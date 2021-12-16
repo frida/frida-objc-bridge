@@ -24,6 +24,7 @@ function Runtime() {
     let cachedNSNumber = null;
     let cachedNSNumberCtor = null;
     let singularTypeById = null;
+    const proxyBlocks = new Map();
 
     try {
         tryInitialize();
@@ -96,6 +97,11 @@ function Runtime() {
     Object.defineProperty(this, 'Block', {
         enumerable: true,
         value: Block
+    });
+
+    Object.defineProperty(this, 'ProxyBlock', {
+        enumerable: true,
+        value: ProxyBlock
     });
 
     Object.defineProperty(this, 'mainQueue', {
@@ -1251,16 +1257,19 @@ function Runtime() {
             return "ObjCIvars";
         }
     }
-
-    let blockDescriptorAllocSize, blockDescriptorDeclaredSize, blockDescriptorOffsets;
+    
+    // remove blockDescriptorDeclaredSize because Descriptor use blockSize;
+    let blockDescriptorAllocSize, blockDescriptorOffsets;
     let blockSize, blockOffsets;
     if (pointerSize === 4) {
-        blockDescriptorAllocSize = 16; /* sizeof (BlockDescriptor) == 12 */
-        blockDescriptorDeclaredSize = 20;
+        blockDescriptorAllocSize = 20;
         blockDescriptorOffsets = {
             reserved: 0,
             size: 4,
-            rest: 8
+            rest: 8,
+            copy: 8,
+            dispose: 12,
+            signature: 16
         };
 
         blockSize = 20;
@@ -1272,12 +1281,14 @@ function Runtime() {
             descriptor: 16
         };
     } else {
-        blockDescriptorAllocSize = 32; /* sizeof (BlockDescriptor) == 24 */
-        blockDescriptorDeclaredSize = 32;
-        blockDescriptorOffsets = {
+        blockDescriptorAllocSize = 48;
+        blockDescriptorOffsets = {  /*all 3 parts of descriptor, but keep 'rest' for read block.*/
             reserved: 0,
             size: 8,
-            rest: 16
+            rest: 16,//
+            copy: 16,
+            dispose: 24,
+            signature: 32
         };
 
         blockSize = 32;
@@ -1320,7 +1331,7 @@ function Runtime() {
             const typesStr = Memory.allocUtf8String(this.types);
 
             descriptor.add(blockDescriptorOffsets.reserved).writeULong(0);
-            descriptor.add(blockDescriptorOffsets.size).writeULong(blockDescriptorDeclaredSize);
+            descriptor.add(blockDescriptorOffsets.size).writeULong(blockSize);//see libclosure/runtime.cpp:_Block_copy stack_block
             descriptor.add(blockDescriptorOffsets.rest).writePointer(typesStr);
 
             block.add(blockOffsets.isa).writePointer(classRegistry.__NSGlobalBlock__);
@@ -1336,48 +1347,116 @@ function Runtime() {
         }
     }
 
-    Object.defineProperties(Block.prototype, {
-      implementation: {
-        enumerable: true,
-        get() {
-            const address = this.handle.add(blockOffsets.invoke).readPointer().strip();
-            const signature = this._getSignature();
-            return makeBlockInvocationWrapper(this, signature, new NativeFunction(
-                address.sign(),
-                signature.retType.type,
-                signature.argTypes.map(function (arg) { return arg.type; }),
-                this._options));
-        },
-        set(func) {
-            const signature = this._getSignature();
-            const callback = new NativeCallback(
-                makeBlockImplementationWrapper(this, signature, func),
-                signature.retType.type,
-                signature.argTypes.map(function (arg) { return arg.type; }));
-            this._callback = callback;
-            const location = this.handle.add(blockOffsets.invoke);
-            location.writePointer(callback.strip().sign('ia', location));
+    const _Block_copy = new NativeFunction(Module.findExportByName('libsystem_blocks.dylib','_Block_copy'),'pointer',['pointer']);
+    const _Block_release = new NativeFunction(Module.findExportByName('libsystem_blocks.dylib','_Block_release'),'void',['pointer']);
+
+    function emptyCallbcak() { }
+    function blockDispose(block) { 
+        var descriptor = block.add(blockOffsets.descriptor).readPointer();
+        var key = descriptor.toString();
+        if(!proxyBlocks.has(key)){
+            //console.err("Not found Block.descriptor at: "+descriptor.toString());
+        }else{
+            var jsblcok = proxyBlocks.get(key);
+            proxyBlocks.delete(key);
+            _Block_release(jsblcok.innerBlock.handle);
         }
-      },
-      declare: {
-        value(signature) {
-            let types = signature.types;
-            if (types === undefined) {
-                types = unparseSignature(signature.retType, ['block'].concat(signature.argTypes));
+    }
+    const ncBlockDispose = new NativeCallback(blockDispose, 'void', ['pointer']);
+    const ncEmptyCallback= new NativeCallback(emptyCallbcak, 'void', []);
+    
+    function ProxyBlock(target, options = defaultInvocationOptions) {
+        this._options = options;
+        if (target instanceof NativePointer) {
+            //read original block.
+            const descriptor = target.add(blockOffsets.descriptor).readPointer();
+            const flags = target.add(blockOffsets.flags).readU32();
+            if ((flags & BLOCK_HAS_SIGNATURE) !== 0) {
+                const signatureOffset = ((flags & BLOCK_HAS_COPY_DISPOSE) !== 0) ? 2 : 0;
+                this.types = descriptor.add(blockDescriptorOffsets.rest + (signatureOffset * pointerSize)).readPointer().readCString();
+                this._signature = parseSignature(this.types);
+            } else {
+                //this.types = "v8@?0";
+                this._signature = null;
             }
-            this.types = types;
-            this._signature = parseSignature(types);
+            //copy(oc) and hold(js) original block
+            this.innerBlock = new Block(_Block_copy(target));
+            target = {implementation:emptyCallbcak};
+        } else {
+            //for ProxyBlock not have innerblock.
+            this.declare(target);
         }
-      },
-      _getSignature: {
-        value() {
-            const signature = this._signature;
-            if (signature === null)
-                throw new Error('block is missing signature; call declare()');
-            return signature;
+        //plan: create a malloc block with use_count(last 2 bytes for block.flags) = 0 // but use_count=0 => never copy or release
+        //doing: create a 'stack' block, can be normally copy & release
+        const descriptor = Memory.alloc(blockDescriptorAllocSize + blockSize);
+        const block = descriptor.add(blockDescriptorAllocSize);
+        const typesStr = Memory.allocUtf8String(this.types);
+
+        descriptor.add(blockDescriptorOffsets.reserved).writeULong(0);
+        descriptor.add(blockDescriptorOffsets.size).writeULong(blockSize);
+        var t = descriptor.add(blockDescriptorOffsets.copy);//copy helper, use empty function
+        t.writePointer(ncEmptyCallback.sign('ia',t));
+        t = descriptor.add(blockDescriptorOffsets.dispose);//dispose helper, use callback to clean jsblock when oc clean ocblock.
+        t.writePointer(ncBlockDispose.sign('ia',t));
+        descriptor.add(blockDescriptorOffsets.signature).writePointer(typesStr);
+
+        block.add(blockOffsets.isa).writePointer(classRegistry.__NSStackBlock__);
+        block.add(blockOffsets.flags).writeU32(BLOCK_HAS_SIGNATURE | BLOCK_HAS_COPY_DISPOSE);
+        block.add(blockOffsets.reserved).writeU32(0);
+        block.add(blockOffsets.descriptor).writePointer(descriptor);
+        this.handle = block;
+        this._storage = [descriptor, typesStr];
+        this.implementation = target.implementation;
+
+        //keey jsblock. block_copy will move block,but not descriptor(not fully tested)
+        proxyBlocks.set(descriptor.toString(),block);
+    }
+
+    const blockPrototype = {
+        implementation: {
+          enumerable: true,
+          get() {
+              const address = this.handle.add(blockOffsets.invoke).readPointer().strip();
+              const signature = this._getSignature();
+              return makeBlockInvocationWrapper(this, signature, new NativeFunction(
+                  address.sign(),
+                  signature.retType.type,
+                  signature.argTypes.map(function (arg) { return arg.type; }),
+                  this._options));
+          },
+          set(func) {
+              const signature = this._getSignature();
+              const callback = new NativeCallback(
+                  makeBlockImplementationWrapper(this, signature, func),
+                  signature.retType.type,
+                  signature.argTypes.map(function (arg) { return arg.type; }));
+              this._callback = callback;
+              const location = this.handle.add(blockOffsets.invoke);
+              location.writePointer(callback.strip().sign('ia', location));
+          }
+        },
+        declare: {
+          value(signature) {
+              let types = signature.types;
+              if (types === undefined) {
+                  types = unparseSignature(signature.retType, ['block'].concat(signature.argTypes));
+              }
+              this.types = types;
+              this._signature = parseSignature(types);
+          }
+        },
+        _getSignature: {
+          value() {
+              const signature = this._signature;
+              if (signature === null)
+                  throw new Error('block is missing signature; call declare()');
+              return signature;
+          }
         }
       }
-    });
+
+    Object.defineProperties(Block.prototype, blockPrototype);
+    Object.defineProperties(ProxyBlock.prototype, blockPrototype);
 
     function collectProtocols(p, acc) {
         acc = acc || {};
