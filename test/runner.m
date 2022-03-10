@@ -3,7 +3,7 @@
 #include <frida-gumjs.h>
 
 #define RUN_SUITE(name)                                             \
-  TEST_RUN_LIST_WITH_DATA (name, gum_script_backend_obtain_duk ()); \
+  TEST_RUN_LIST_WITH_DATA (name, gum_script_backend_obtain_qjs ()); \
   if (v8_backend != NULL)                                           \
     TEST_RUN_LIST_WITH_DATA (name, v8_backend)
 

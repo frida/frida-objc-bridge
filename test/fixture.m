@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2019 Ole André Vadla Ravnås <oleavr@nowsecure.com>
+ * Copyright (C) 2010-2020 Ole André Vadla Ravnås <oleavr@nowsecure.com>
  * Copyright (C) 2013 Karl Trygve Kalleberg <karltk@boblycat.org>
  *
  * Licence: wxWindows Library Licence, Version 3.1
@@ -7,40 +7,40 @@
 
 #include "fixture.h"
 
-#include <frida-gumjs.h>
+#include <Block.h>
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 
 #define ANY_LINE_NUMBER -1
 #define MESSAGE_DEFAULT_TIMEOUT_MSEC 500
 
-#define TESTCASE(NAME)                                                    \
+#define TESTCASE(NAME)                                                        \
     void test_ ## NAME (TestFixture * fixture, gconstpointer data)
-#define TESTENTRY(NAME)                                                   \
-  G_STMT_START                                                            \
-  {                                                                       \
-    extern void test_ ##NAME (TestFixture * fixture, gconstpointer data); \
-    const gchar * backend_name;                                           \
-    gchar * path;                                                         \
-                                                                          \
-    backend_name = g_type_name (G_TYPE_FROM_INSTANCE (fixture_data));     \
-                                                                          \
-    path = g_strconcat ("/" SUITE "/",                                    \
-        group, (*group != '\0') ? "/" : "",                               \
-        #NAME "#",                                                        \
-        strcmp (backend_name, "GumDukScriptBackend") == 0 ? "DUK" : "V8", \
-        NULL);                                                            \
-                                                                          \
-    g_test_add (path,                                                     \
-        TestFixture,                                                      \
-        fixture_data,                                                     \
-        test_fixture_setup,                                               \
-        test_ ##NAME,                                                     \
-        test_fixture_teardown);                                           \
-                                                                          \
-    g_free (path);                                                        \
-  }                                                                       \
-  G_STMT_END;
+#define TESTENTRY(NAME)                                                       \
+    G_STMT_START                                                              \
+    {                                                                         \
+      extern void test_ ##NAME (TestFixture * fixture, gconstpointer data);   \
+      const gchar * backend_name;                                             \
+      gchar * path;                                                           \
+                                                                              \
+      backend_name = g_type_name (G_TYPE_FROM_INSTANCE (fixture_data));       \
+                                                                              \
+      path = g_strconcat ("/" SUITE "/",                                      \
+          group, (*group != '\0') ? "/" : "",                                 \
+          #NAME "#",                                                          \
+          strcmp (backend_name, "GumQuickScriptBackend") == 0 ? "QJS" : "V8", \
+          NULL);                                                              \
+                                                                              \
+      g_test_add (path,                                                       \
+          TestFixture,                                                        \
+          fixture_data,                                                       \
+          test_fixture_setup,                                                 \
+          test_ ##NAME,                                                       \
+          test_fixture_teardown);                                             \
+                                                                              \
+      g_free (path);                                                          \
+    }                                                                         \
+    G_STMT_END;
 
 #define COMPILE_AND_LOAD_SCRIPT(SOURCE, ...) \
     test_fixture_compile_and_load_script (fixture, SOURCE, \

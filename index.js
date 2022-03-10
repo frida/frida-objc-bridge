@@ -1,22 +1,24 @@
 /* jshint esnext: true, evil: true */
 
 const {getApi, defaultInvocationOptions} = require('./lib/api');
-const gonzales = require('./lib/gonzales');
+const fastpaths = require('./lib/fastpaths');
 
 function Runtime() {
     const pointerSize = Process.pointerSize;
-    const api = getApi();
-    const realizedClasses = new Set([]);
+    let api = null;
+    let apiError = null;
+    const realizedClasses = new Set();
     const classRegistry = new ClassRegistry();
     const protocolRegistry = new ProtocolRegistry();
-    const scheduledWork = {};
+    const replacedMethods = new Map();
+    const scheduledWork = new Map();
     let nextId = 1;
     let workCallback = null;
     let NSAutoreleasePool = null;
-    const bindings = {};
+    const bindings = new Map();
     let readObjectIsa = null;
-    const msgSendBySignatureId = {};
-    const msgSendSuperBySignatureId = {};
+    const msgSendBySignatureId = new Map();
+    const msgSendSuperBySignatureId = new Map();
     let cachedNSString = null;
     let cachedNSStringCtor = null;
     let cachedNSNumber = null;
@@ -36,14 +38,45 @@ function Runtime() {
     let cachedNSNull = null;
     let cachedNSNullInstance = null;
     let singularTypeById = null;
-    const PRIV = Symbol('priv');
 
-    const available = api !== null;
+    try {
+        tryInitialize();
+    } catch (e) {
+    }
+
+    function tryInitialize() {
+        if (api !== null)
+            return true;
+
+        if (apiError !== null)
+            throw apiError;
+
+        try {
+            api = getApi();
+        } catch (e) {
+            apiError = e;
+            throw e;
+        }
+
+        return api !== null;
+    }
+
+    function dispose() {
+        for (const [rawMethodHandle, impls] of replacedMethods.entries()) {
+            const methodHandle = ptr(rawMethodHandle);
+            const [oldImp, newImp] = impls;
+            if (api.method_getImplementation(methodHandle).equals(newImp))
+                api.method_setImplementation(methodHandle, oldImp);
+        }
+        replacedMethods.clear();
+    }
+
+    Script.bindWeak(this, dispose);
 
     Object.defineProperty(this, 'available', {
         enumerable: true,
-        get: function () {
-            return available;
+        get() {
+            return tryInitialize();
         }
     });
 
@@ -56,12 +89,12 @@ function Runtime() {
 
     Object.defineProperty(this, 'classes', {
         enumerable: true,
-        value: available ? classRegistry : {}
+        value: classRegistry
     });
 
     Object.defineProperty(this, 'protocols', {
         enumerable: true,
-        value: available ? protocolRegistry : {}
+        value: protocolRegistry
     });
 
     Object.defineProperty(this, 'Object', {
@@ -81,7 +114,7 @@ function Runtime() {
 
     Object.defineProperty(this, 'mainQueue', {
         enumerable: true,
-        get: function () {
+        get() {
             return api._dispatch_main_q;
         }
     });
@@ -133,13 +166,13 @@ function Runtime() {
 
     Object.defineProperty(this, 'chooseSync', {
         enumerable: true,
-        value: function (specifier) {
+        value(specifier) {
             const instances = [];
             choose(specifier, {
-                onMatch: function (i) {
+                onMatch(i) {
                     instances.push(i);
                 },
-                onComplete: function () {
+                onComplete() {
                 }
             });
             return instances;
@@ -148,7 +181,7 @@ function Runtime() {
 
     this.schedule = function (queue, work) {
         const id = ptr(nextId++);
-        scheduledWork[id.toString()] = work;
+        scheduledWork.set(id.toString(), work);
 
         if (workCallback === null) {
             workCallback = new NativeCallback(performScheduledWorkItem, 'void', ['pointer']);
@@ -160,8 +193,8 @@ function Runtime() {
 
     function performScheduledWorkItem(rawId) {
         const id = rawId.toString();
-        const work = scheduledWork[id];
-        delete scheduledWork[id];
+        const work = scheduledWork.get(id);
+        scheduledWork.delete(id);
 
         if (NSAutoreleasePool === null)
             NSAutoreleasePool = classRegistry.NSAutoreleasePool;
@@ -252,9 +285,6 @@ function Runtime() {
                         const handle = classHandles.add(i * pointerSize).readPointer();
                         const name = api.class_getName(handle).readUtf8String();
                         cachedClasses[name] = handle;
-
-                        // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
-                        target[name] = true;
                     }
                     numCachedClasses = numClasses;
                 }
@@ -344,31 +374,24 @@ function Runtime() {
                 return false;
             },
             ownKeys(target) {
-                const protocolNames = [];
-                cachedProtocols = {};
-
                 const numProtocolsBuf = Memory.alloc(pointerSize);
                 const protocolHandles = api.objc_copyProtocolList(numProtocolsBuf);
                 try {
                     const numProtocols = numProtocolsBuf.readUInt();
                     if (numProtocols !== numCachedProtocols) {
+                        cachedProtocols = {};
                         for (let i = 0; i !== numProtocols; i++) {
                             const handle = protocolHandles.add(i * pointerSize).readPointer();
                             const name = api.protocol_getName(handle).readUtf8String();
 
-                            protocolNames.push(name);
                             cachedProtocols[name] = handle;
-
-                            // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
-                            target[name] = true;
                         }
                         numCachedProtocols = numProtocols;
                     }
                 } finally {
                     api.free(protocolHandles);
                 }
-
-                return protocolNames;
+                return Object.keys(cachedProtocols);
             },
             getOwnPropertyDescriptor(target, property) {
                 return {
@@ -450,11 +473,9 @@ function Runtime() {
         let cachedProtocolMethods = null;
         let respondsToSelector = null;
         const cachedMethods = {};
-        const replacedMethods = {};
         let cachedNativeMethodNames = null;
         let cachedOwnMethodNames = null;
         let cachedIvars = null;
-        let weakRef = null;
         let cachedIsKindOfClass = null;
 
         function toJSObject(o) {
@@ -730,9 +751,6 @@ function Runtime() {
                                     }
                                     jsNames[name] = true;
 
-                                    // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
-                                    target[name] = true;
-
                                     const fullName = fullNamePrefix + nativeName;
                                     if (cachedMethods[fullName] === undefined) {
                                         const details = {
@@ -760,9 +778,6 @@ function Runtime() {
                                 const details = protocolMethods[methodName];
                                 if (details.implemented) {
                                     methodNames.push(methodName);
-
-                                    // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
-                                    target[methodName] = true;
                                 }
                             }
                         });
@@ -796,14 +811,6 @@ function Runtime() {
                 return !!(details !== null && details.implemented);
             }
             return findMethod(name) !== null;
-        }
-
-        function dispose() {
-            Object.keys(replacedMethods).forEach(function (key) {
-                const methodHandle = ptr(key);
-                const oldImp = replacedMethods[key];
-                api.method_setImplementation(methodHandle, oldImp);
-            });
         }
 
         function classHandle() {
@@ -958,7 +965,7 @@ function Runtime() {
                             types: method.types
                         };
                         Object.defineProperty(details, 'implemented', {
-                            get: function () {
+                            get() {
                                 if (!didCheckImplemented) {
                                     if (method.required) {
                                         implemented = true;
@@ -989,22 +996,10 @@ function Runtime() {
                 return null;
             let wrapper = method.wrapper;
             if (wrapper === null) {
-                wrapper = makeMethodInvocationWrapper(method, self, superSpecifier, replaceMethodImplementation, defaultInvocationOptions);
+                wrapper = makeMethodInvocationWrapper(method, self, superSpecifier, defaultInvocationOptions);
                 method.wrapper = wrapper;
             }
             return wrapper;
-        }
-
-        function replaceMethodImplementation(methodHandle, imp, oldImp) {
-            api.method_setImplementation(methodHandle, imp);
-
-            if (!imp.equals(oldImp))
-                replacedMethods[methodHandle.toString()] = oldImp;
-            else
-                delete replacedMethods[methodHandle.toString()];
-
-            if (weakRef === null)
-                weakRef = WeakRef.bind(self, dispose);
         }
 
         function parseMethodName(rawName) {
@@ -1030,6 +1025,32 @@ function Runtime() {
         function equals(ptr) {
             return handle.equals(getHandle(ptr));
         }
+    }
+
+    function getReplacementMethodImplementation(methodHandle) {
+        const existingEntry = replacedMethods.get(methodHandle.toString());
+        if (existingEntry === undefined)
+            return null;
+        const [, newImp] = existingEntry;
+        return newImp;
+    }
+
+    function replaceMethodImplementation(methodHandle, imp) {
+        const key = methodHandle.toString();
+
+        let oldImp;
+        const existingEntry = replacedMethods.get(key);
+        if (existingEntry !== undefined)
+            [oldImp] = existingEntry;
+        else
+            oldImp = api.method_getImplementation(methodHandle);
+
+        if (!imp.equals(oldImp))
+            replacedMethods.set(key, [oldImp, imp]);
+        else
+            replacedMethods.delete(key);
+
+        api.method_setImplementation(methodHandle, imp);
     }
 
     function collectMethodNames(klass, prefix) {
@@ -1064,7 +1085,7 @@ function Runtime() {
         });
 
         Object.defineProperty(this, 'name', {
-            get: function () {
+            get() {
                 if (cachedName === null)
                     cachedName = api.protocol_getName(handle).readUtf8String();
                 return cachedName;
@@ -1073,7 +1094,7 @@ function Runtime() {
         });
 
         Object.defineProperty(this, 'protocols', {
-            get: function () {
+            get() {
                 if (cachedProtocols === null) {
                     cachedProtocols = {};
                     const numProtocolsBuf = Memory.alloc(pointerSize);
@@ -1097,7 +1118,7 @@ function Runtime() {
         });
 
         Object.defineProperty(this, 'properties', {
-            get: function () {
+            get() {
                 if (cachedProperties === null) {
                     cachedProperties = {};
                     const numBuf = Memory.alloc(pointerSize);
@@ -1136,7 +1157,7 @@ function Runtime() {
         });
 
         Object.defineProperty(this, 'methods', {
-            get: function () {
+            get() {
                 if (cachedMethods === null) {
                     cachedMethods = {};
                     const numBuf = Memory.alloc(pointerSize);
@@ -1240,14 +1261,8 @@ function Runtime() {
                 return true;
             },
             ownKeys(target) {
-                if (cachedIvarNames === null) {
+                if (cachedIvarNames === null)
                     cachedIvarNames = Object.keys(ivars);
-                    cachedIvarNames.forEach(name => {
-                        // Duktape does not support getOwnPropertyDescriptor yet and checks the target instead:
-                        target[name] = true;
-                    });
-                }
-
                 return cachedIvarNames;
             },
             getOwnPropertyDescriptor(target, property) {
@@ -1367,10 +1382,7 @@ function Runtime() {
     const BLOCK_HAS_SIGNATURE =    (1 << 30);
 
     function Block(target, options = defaultInvocationOptions) {
-        const priv = {
-            options,
-        };
-        this[PRIV] = priv;
+        this._options = options;
 
         if (target instanceof NativePointer) {
             const descriptor = target.add(blockOffsets.descriptor).readPointer();
@@ -1381,23 +1393,16 @@ function Runtime() {
             if ((flags & BLOCK_HAS_SIGNATURE) !== 0) {
                 const signatureOffset = ((flags & BLOCK_HAS_COPY_DISPOSE) !== 0) ? 2 : 0;
                 this.types = descriptor.add(blockDescriptorOffsets.rest + (signatureOffset * pointerSize)).readPointer().readCString();
-                priv.signature = parseSignature(this.types);
+                this._signature = parseSignature(this.types);
+            } else {
+                this._signature = null;
             }
         } else {
-            if (!(typeof target === 'object' &&
-                    (target.hasOwnProperty('types') || (target.hasOwnProperty('retType') && target.hasOwnProperty('argTypes'))) &&
-                    target.hasOwnProperty('implementation'))) {
-                throw new Error('Expected type metadata and implementation');
-            }
-
-            let types = target.types;
-            if (types === undefined) {
-                types = unparseSignature(target.retType, ['block'].concat(target.argTypes));
-            }
+            this.declare(target);
 
             const descriptor = Memory.alloc(blockDescriptorAllocSize + blockSize);
             const block = descriptor.add(blockDescriptorAllocSize);
-            const typesStr = Memory.allocUtf8String(types);
+            const typesStr = Memory.allocUtf8String(this.types);
 
             descriptor.add(blockDescriptorOffsets.reserved).writeULong(0);
             descriptor.add(blockDescriptorOffsets.size).writeULong(blockDescriptorDeclaredSize);
@@ -1410,36 +1415,53 @@ function Runtime() {
 
             this.handle = block;
 
-            priv.descriptor = descriptor;
-            this.types = types;
-            priv.typesStr = typesStr;
-            priv.signature = parseSignature(types);
+            this._storage = [descriptor, typesStr];
 
             this.implementation = target.implementation;
         }
     }
 
-    Object.defineProperty(Block.prototype, 'implementation', {
+    Object.defineProperties(Block.prototype, {
+      implementation: {
         enumerable: true,
-        get: function () {
-            const priv = this[PRIV];
-            const address = this.handle.add(blockOffsets.invoke).readPointer();
-            const signature = priv.signature;
+        get() {
+            const address = this.handle.add(blockOffsets.invoke).readPointer().strip();
+            const signature = this._getSignature();
             return makeBlockInvocationWrapper(this, signature, new NativeFunction(
-                address,
+                address.sign(),
                 signature.retType.type,
                 signature.argTypes.map(function (arg) { return arg.type; }),
-                priv.options));
+                this._options));
         },
-        set: function (func) {
-            const priv = this[PRIV];
-            const signature = priv.signature;
-            priv.callback = new NativeCallback(
+        set(func) {
+            const signature = this._getSignature();
+            const callback = new NativeCallback(
                 makeBlockImplementationWrapper(this, signature, func),
                 signature.retType.type,
                 signature.argTypes.map(function (arg) { return arg.type; }));
-            this.handle.add(blockOffsets.invoke).writePointer(priv.callback);
+            this._callback = callback;
+            const location = this.handle.add(blockOffsets.invoke);
+            location.writePointer(callback.strip().sign('ia', location));
         }
+      },
+      declare: {
+        value(signature) {
+            let types = signature.types;
+            if (types === undefined) {
+                types = unparseSignature(signature.retType, ['block'].concat(signature.argTypes));
+            }
+            this.types = types;
+            this._signature = parseSignature(types);
+        }
+      },
+      _getSignature: {
+        value() {
+            const signature = this._signature;
+            if (signature === null)
+                throw new Error('block is missing signature; call declare()');
+            return signature;
+        }
+      }
     });
 
     function collectProtocols(p, acc) {
@@ -1459,6 +1481,11 @@ function Runtime() {
         const protocols = properties.protocols || [];
         const methods = properties.methods || {};
         const events = properties.events || {};
+        const supportedSelectors = new Set(
+            Object.keys(methods)
+                .filter(m => /([+\-])\s(\S+)/.exec(m) !== null)
+                .map(m => m.split(' ')[1])
+        );
 
         const proxyMethods = {
             '- dealloc': function () {
@@ -1473,6 +1500,10 @@ function Runtime() {
                     callback.call(this);
             },
             '- respondsToSelector:': function (sel) {
+                const selector = selectorAsString(sel);
+                if (supportedSelectors.has(selector))
+                    return true;
+
                 return this.data.target.respondsToSelector_(sel);
             },
             '- forwardingTargetForSelector:': function (sel) {
@@ -1596,7 +1627,7 @@ function Runtime() {
         // Keep a reference to the callbacks so they don't get GCed
         classHandle._methodCallbacks = methodCallbacks;
 
-        WeakRef.bind(classHandle, makeClassDestructor(ptr(classHandle)));
+        Script.bindWeak(classHandle, makeClassDestructor(ptr(classHandle)));
 
         return new ObjCObject(classHandle);
     }
@@ -1672,16 +1703,16 @@ function Runtime() {
     function bind(obj, data) {
         const handle = getHandle(obj);
         const self = (obj instanceof ObjCObject) ? obj : new ObjCObject(handle);
-        bindings[handle.toString()] = {
+        bindings.set(handle.toString(), {
             self: self,
             super: self.$super,
             data: data
-        };
+        });
     }
 
     function unbind(obj) {
         const handle = getHandle(obj);
-        delete bindings[handle.toString()];
+        bindings.delete(handle.toString());
     }
 
     function getBoundData(obj) {
@@ -1691,7 +1722,7 @@ function Runtime() {
     function getBinding(obj) {
         const handle = getHandle(obj);
         const key = handle.toString();
-        let binding = bindings[key];
+        let binding = bindings.get(key);
         if (binding === undefined) {
             const self = (obj instanceof ObjCObject) ? obj : new ObjCObject(handle);
             binding = {
@@ -1699,7 +1730,7 @@ function Runtime() {
                 super: self.$super,
                 data: {}
             };
-            bindings[key] = binding;
+            bindings.set(key, binding);
         }
         return binding;
     }
@@ -1786,7 +1817,7 @@ function Runtime() {
         if (!(cls instanceof ObjCObject && (cls.$kind === 'class' || cls.$kind === 'meta-class')))
             throw new Error("Expected an ObjC.Object for a class or meta-class");
 
-        const matches = gonzales.get()
+        const matches = fastpaths.get()
             .choose(cls, subclasses)
             .map(handle => new ObjCObject(handle));
         for (const match of matches) {
@@ -1798,7 +1829,7 @@ function Runtime() {
         callbacks.onComplete();
     }
 
-    function makeMethodInvocationWrapper(method, owner, superSpecifier, replaceImplementation, invocationOptions) {
+    function makeMethodInvocationWrapper(method, owner, superSpecifier, invocationOptions) {
         const sel = method.sel;
         let handle = method.handle;
         let types;
@@ -1842,9 +1873,6 @@ function Runtime() {
             returnCaptureRight = "";
         }
 
-        let oldImp = null;
-        let newImp = null;
-
         const m = eval("var m = function (" + argVariableNames.join(", ") + ") { " +
             returnCaptureLeft + "objc_msgSend(" + callArgs.join(", ") + ")" + returnCaptureRight + ";" +
         " }; m;");
@@ -1858,19 +1886,19 @@ function Runtime() {
 
         Object.defineProperty(m, 'implementation', {
             enumerable: true,
-            get: function () {
+            get() {
                 const h = getMethodHandle();
 
-                return new NativeFunction(api.method_getImplementation(h), m.returnType, m.argumentTypes, invocationOptions);
+                const impl = new NativeFunction(api.method_getImplementation(h), m.returnType, m.argumentTypes, invocationOptions);
+
+                const newImp = getReplacementMethodImplementation(h);
+                if (newImp !== null)
+                    impl._callback = newImp;
+
+                return impl;
             },
-            set: function (imp) {
-                const h = getMethodHandle();
-
-                if (oldImp === null)
-                    oldImp = api.method_getImplementation(h);
-                newImp = imp;
-
-                replaceImplementation(h, imp, oldImp);
+            set(imp) {
+                replaceMethodImplementation(getMethodHandle(), imp);
             }
         });
 
@@ -1881,7 +1909,7 @@ function Runtime() {
         m.types = types;
 
         m.clone = function (options) {
-            return makeMethodInvocationWrapper(method, owner, superSpecifier, replaceImplementation, options);
+            return makeMethodInvocationWrapper(method, owner, superSpecifier, options);
         };
 
         function getMethodHandle() {
@@ -2061,25 +2089,21 @@ function Runtime() {
         return result;
     }
 
-    if (available) {
-        const {readPointer} = Memory;
+    const isaMasks = {
+        x64: '0x7ffffffffff8',
+        arm64: '0xffffffff8'
+    };
 
-        const isaMasks = {
-            x64: '0x7ffffffffff8',
-            arm64: '0xffffffff8'
+    const rawMask = isaMasks[Process.arch];
+    if (rawMask !== undefined) {
+        const mask = ptr(rawMask);
+        readObjectIsa = function (p) {
+            return p.readPointer().and(mask);
         };
-
-        const rawMask = isaMasks[Process.arch];
-        if (rawMask !== undefined) {
-            const mask = ptr(rawMask);
-            readObjectIsa = function (p) {
-                return readPointer(p).and(mask);
-            };
-        } else {
-            readObjectIsa = function (p) {
-                return readPointer(p);
-            };
-        }
+    } else {
+        readObjectIsa = function (p) {
+            return p.readPointer();
+        };
     }
 
     function getMsgSendImpl(signature, invocationOptions) {
@@ -2096,10 +2120,10 @@ function Runtime() {
 
         const {id} = signature;
 
-        let impl = cache[id];
+        let impl = cache.get(id);
         if (impl === undefined) {
             impl = makeMsgSendImpl(signature, invocationOptions, isSuper);
-            cache[id] = impl;
+            cache.set(id, impl);
         }
 
         return impl;
@@ -2160,10 +2184,17 @@ function Runtime() {
     }
 
     function unparseSignature(retType, argTypes) {
-        const frameSize = argTypes.length * pointerSize;
-        return typeIdFromAlias(retType) + frameSize + argTypes.map(function (argType, i) {
-            const frameOffset = (i * pointerSize);
-            return typeIdFromAlias(argType) + frameOffset;
+        const retTypeId = typeIdFromAlias(retType);
+        const argTypeIds = argTypes.map(typeIdFromAlias);
+
+        const argSizes = argTypeIds.map(id => singularTypeById[id].size);
+        const frameSize = argSizes.reduce((total, size) => total + size, 0);
+
+        let frameOffset = 0;
+        return retTypeId + frameSize + argTypeIds.map((id, i) => {
+            const result = id + frameOffset;
+            frameOffset += argSizes[i];
+            return result;
         }).join("");
     }
 
@@ -2512,7 +2543,7 @@ function Runtime() {
     function arrayType(length, elementType) {
         return {
             type: 'pointer',
-            read: function (address) {
+            read(address) {
                 const result = [];
 
                 const elementSize = elementType.size;
@@ -2522,7 +2553,7 @@ function Runtime() {
 
                 return result;
             },
-            write: function (address, values) {
+            write(address, values) {
                 const elementSize = elementType.size;
                 values.forEach((value, index) => {
                     elementType.write(address.add(index * elementSize), value);
@@ -2579,10 +2610,10 @@ function Runtime() {
         return {
             type: fieldTypes.map(t => t.type),
             size: totalSize,
-            read: function (address) {
+            read(address) {
                 return fieldTypes.map((type, index) => type.read(address.add(fieldOffsets[index])));
             },
-            write: function (address, values) {
+            write(address, values) {
                 values.forEach((value, index) => {
                     fieldTypes[index].write(address.add(fieldOffsets[index]), value);
                 });
@@ -2642,7 +2673,7 @@ function Runtime() {
             size: 1,
             read: address => address.readS8(),
             write: (address, value) => { address.writeS8(value); },
-            toNative: function (v) {
+            toNative(v) {
                 if (typeof v === 'boolean') {
                     return v ? 1 : 0;
                 }
@@ -2720,10 +2751,10 @@ function Runtime() {
             size: 1,
             read: address => address.readU8(),
             write: (address, value) => { address.writeU8(value); },
-            fromNative: function (v) {
+            fromNative(v) {
                 return v ? true : false;
             },
-            toNative: function (v) {
+            toNative(v) {
                 return v ? 1 : 0;
             }
         },
@@ -2736,7 +2767,7 @@ function Runtime() {
             size: pointerSize,
             read: address => address.readPointer(),
             write: (address, value) => { address.writePointer(value); },
-            fromNative: function (h) {
+            fromNative(h) {
                 return h.readUtf8String();
             }
         },
@@ -2762,6 +2793,12 @@ function Runtime() {
             read: address => address.readPointer(),
             write: (address, value) => { address.writePointer(value); },
             toNative: toNativeObjectArray
+        },
+        '^v': {
+            type: 'pointer',
+            size: pointerSize,
+            read: address => address.readPointer(),
+            write: (address, value) => { address.writePointer(value); },
         },
         '#': {
             type: 'pointer',

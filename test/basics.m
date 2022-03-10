@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2019 Ole André Vadla Ravnås <oleavr@nowsecure.com>
+ * Copyright (C) 2015-2020 Ole André Vadla Ravnås <oleavr@nowsecure.com>
  *
  * Licence: wxWindows Library Licence, Version 3.1
  */
@@ -9,6 +9,7 @@
 
 TESTLIST_BEGIN (basics)
   TESTENTRY (classes_can_be_enumerated)
+  TESTENTRY (protocols_can_be_enumerated)
   TESTENTRY (object_enumeration_should_contain_parent_methods)
   TESTENTRY (object_enumeration_should_contain_protocol_methods)
   TESTENTRY (class_enumeration_should_not_contain_instance_methods)
@@ -34,15 +35,18 @@ TESTLIST_BEGIN (basics)
     TESTENTRY (block_can_be_invoked)
     TESTENTRY (block_can_be_traced_while_invoked)
     TESTENTRY (block_can_be_migrated_to_the_heap_behind_our_back)
+    TESTENTRY (block_without_signature_can_be_used_after_calling_declare)
   TESTGROUP_END ()
 
   TESTENTRY (basic_method_implementation_can_be_overridden)
+  TESTENTRY (method_replacement_should_stay_alive_independently_of_class_wrapper)
   TESTENTRY (struct_consuming_method_implementation_can_be_overridden)
   TESTENTRY (struct_returning_method_can_be_called)
   TESTENTRY (floating_point_returning_method_can_be_called)
   TESTENTRY (attempt_to_read_inexistent_property_should_yield_undefined)
   TESTENTRY (proxied_method_can_be_invoked)
   TESTENTRY (proxied_method_can_be_overridden)
+  TESTENTRY (proxy_instance_responds_to_selector_for_optional_methods_works)
   TESTENTRY (methods_with_weird_names_can_be_invoked)
   TESTENTRY (method_call_preserves_value)
   TESTENTRY (method_call_can_be_traced)
@@ -62,6 +66,7 @@ TESTLIST_END ()
 @protocol FridaCalculator
 - (int)add:(int)value;
 - (void)add:(int)value completion:(void (^)(int, NSError *))block;
+- (void)addSquared:(int)value completion:(void (^)(int, void *))block;
 - (int)sub:(int)value;
 @optional
 - (int)magic;
@@ -84,7 +89,12 @@ TESTLIST_END ()
 - (int)add:(int)value { return 1337 + value; }
 - (void)add:(int)value completion:(void (^)(int, NSError *))block {
   dispatch_async (dispatch_get_global_queue (DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    block(1337 + value, nil);
+    block (1337 + value, nil);
+  });
+}
+- (void)addSquared:(int)value completion:(void (^)(int, void *))block {
+  dispatch_async (dispatch_get_global_queue (DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    block (1337 + (value * value), GSIZE_TO_POINTER (0x42));
   });
 }
 - (int)sub:(int)value { return 1337 - value; }
@@ -102,7 +112,29 @@ TESTCASE (classes_can_be_enumerated)
           "count++;"
         "}"
       "}"
-      "send(count === numClasses);");
+      "send(count === numClasses);"
+      "var numClassesNow = Object.keys(ObjC.classes).length;"
+      "send(numClassesNow === numClasses);");
+  EXPECT_SEND_MESSAGE_WITH ("true");
+  EXPECT_SEND_MESSAGE_WITH ("true");
+  EXPECT_SEND_MESSAGE_WITH ("true");
+}
+
+TESTCASE (protocols_can_be_enumerated)
+{
+  COMPILE_AND_LOAD_SCRIPT (
+      "var numProtocols = Object.keys(ObjC.protocols).length;"
+      "send(numProtocols > 100);"
+      "var count = 0;"
+      "for (var protocolName in ObjC.protocols) {"
+        "if (ObjC.protocols.hasOwnProperty(protocolName)) {"
+          "count++;"
+        "}"
+      "}"
+      "send(count === numProtocols);"
+      "var numProtocolsNow = Object.keys(ObjC.protocols).length;"
+      "send(numProtocolsNow === numProtocols);");
+  EXPECT_SEND_MESSAGE_WITH ("true");
   EXPECT_SEND_MESSAGE_WITH ("true");
   EXPECT_SEND_MESSAGE_WITH ("true");
 }
@@ -438,6 +470,20 @@ TESTCASE (block_can_be_implemented)
       calc);
   EXPECT_SEND_MESSAGE_WITH ("[1340,null]");
   EXPECT_NO_MESSAGES ();
+
+  COMPILE_AND_LOAD_SCRIPT (
+      "var calc = new ObjC.Object(" GUM_PTR_CONST ");"
+      "var onComplete = new ObjC.Block({"
+          "retType: 'void',"
+          "argTypes: ['int', 'pointer'],"
+          "implementation: function (result, data) {"
+              "send([result, data]);"
+          "}"
+      "});"
+      "calc.addSquared_completion_(7, onComplete);",
+      calc);
+  EXPECT_SEND_MESSAGE_WITH ("[1386,\"0x42\"]");
+  EXPECT_NO_MESSAGES ();
 }
 
 TESTCASE (block_can_be_invoked)
@@ -528,6 +574,81 @@ TESTCASE (block_can_be_migrated_to_the_heap_behind_our_back)
   g_assert_cmpint (calls, ==, 1);
 }
 
+typedef struct _TestBlock TestBlock;
+typedef struct _TestBlockSignature TestBlockSignature;
+
+struct _TestBlock
+{
+  void * isa;
+  int flags;
+  int reserved;
+  void (* invoke) (TestBlock * block, int value);
+  TestBlockSignature * signature;
+
+  int last_seen_value;
+};
+
+struct _TestBlockSignature
+{
+  unsigned long int reserved;
+  unsigned long int size;
+};
+
+static void test_block_invoke (TestBlock * block, int value);
+
+TESTCASE (block_without_signature_can_be_used_after_calling_declare)
+{
+  TestBlock block;
+  TestBlockSignature block_signature;
+
+  block.isa = _NSConcreteStackBlock;
+  block.flags = 0;
+  block.reserved = 0;
+  block.invoke = test_block_invoke;
+  block.signature = &block_signature;
+  block.last_seen_value = -1;
+
+  block_signature.reserved = 0;
+  block_signature.size = sizeof (TestBlock);
+
+  COMPILE_AND_LOAD_SCRIPT (
+      "var block = new ObjC.Block(" GUM_PTR_CONST ");"
+      "block.implementation(42);",
+      &block);
+  EXPECT_ERROR_MESSAGE_WITH (ANY_LINE_NUMBER,
+      "Error: block is missing signature; call declare()");
+  g_assert_cmpint (block.last_seen_value, ==, -1);
+
+  COMPILE_AND_LOAD_SCRIPT (
+      "var block = new ObjC.Block(" GUM_PTR_CONST ");"
+      "send(typeof block.types);"
+      "block.declare({ retType: 'void', argTypes: ['int'] });"
+      "send(block.types);"
+      "block.implementation(42);",
+      &block);
+  EXPECT_SEND_MESSAGE_WITH ("\"undefined\"");
+  EXPECT_SEND_MESSAGE_WITH ("\"v12@?0i8\"");
+  EXPECT_NO_MESSAGES ();
+  g_assert_cmpint (block.last_seen_value, ==, 42);
+
+  COMPILE_AND_LOAD_SCRIPT (
+      "var block = new ObjC.Block(" GUM_PTR_CONST ");"
+      "block.declare({ types: 'v12@?0i8' });"
+      "send(block.types);"
+      "block.implementation(24);",
+      &block);
+  EXPECT_SEND_MESSAGE_WITH ("\"v12@?0i8\"");
+  EXPECT_NO_MESSAGES ();
+  g_assert_cmpint (block.last_seen_value, ==, 24);
+}
+
+static void
+test_block_invoke (TestBlock * block,
+                   int value)
+{
+  block->last_seen_value = value;
+}
+
 TESTCASE (basic_method_implementation_can_be_overridden)
 {
   NSString * str = [NSString stringWithUTF8String:"Badger"];
@@ -539,6 +660,29 @@ TESTCASE (basic_method_implementation_can_be_overridden)
           "ObjC.implement(method, function (handle, selector) {"
               "return NSString.stringWithUTF8String_(Memory.allocUtf8String(\"Snakes\"));"
           "});");
+  EXPECT_NO_MESSAGES ();
+
+  NSString * desc = [str description];
+  EXPECT_NO_MESSAGES ();
+
+  g_assert_cmpstr (desc.UTF8String, ==, "Snakes");
+}
+
+TESTCASE (method_replacement_should_stay_alive_independently_of_class_wrapper)
+{
+  NSString * str = [NSString stringWithUTF8String:"Badger"];
+
+  COMPILE_AND_LOAD_SCRIPT (
+      "(() => {"
+          "var NSString = ObjC.classes.NSString;"
+          "var method = NSString[\"- description\"];"
+          "method.implementation ="
+              "ObjC.implement(method, function (handle, selector) {"
+                  "return NSString.stringWithUTF8String_("
+                      "Memory.allocUtf8String(\"Snakes\"));"
+              "});"
+      "})();"
+      "gc();");
   EXPECT_NO_MESSAGES ();
 
   NSString * desc = [str description];
@@ -717,6 +861,30 @@ TESTCASE (proxied_method_can_be_overridden)
   EXPECT_SEND_MESSAGE_WITH ("\"ready\"");
 
   g_assert_cmpint ([calc add:3], ==, 1230);
+}
+
+TESTCASE (proxy_instance_responds_to_selector_for_optional_methods_works)
+{
+  FridaDefaultCalculator * calc = [[[FridaDefaultCalculator alloc] init]
+      autorelease];
+
+  COMPILE_AND_LOAD_SCRIPT (
+      "var pool = ObjC.classes.NSAutoreleasePool.alloc().init();"
+      "var CalculatorProxy = ObjC.registerProxy({"
+        "protocols: [ObjC.protocols.FridaCalculator],"
+        "methods: {"
+          "'- magic': function () {"
+            "return 0xdeadbeef;"
+          "}"
+        "}"
+      "});"
+      "var calculatorProxy = new CalculatorProxy(" GUM_PTR_CONST ", {});"
+      "var calculator = new ObjC.Object(calculatorProxy);"
+      "var sel = ObjC.selector('magic');"
+      "send(calculator.respondsToSelector_(sel));"
+      "pool.release();",
+      calc);
+  EXPECT_SEND_MESSAGE_WITH ("1");
 }
 
 @interface FridaTest1 : NSObject
