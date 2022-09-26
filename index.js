@@ -1696,6 +1696,9 @@ function Runtime() {
             return obj;
         else if (typeof obj === 'object' && obj.hasOwnProperty('handle'))
             return obj.handle;
+        const nativeObj = toNativeId(obj, true);
+        if (typeof nativeObj === 'object' && nativeObj.hasOwnProperty('handle'))
+            return nativeObj.handle;
         else
             throw new Error("Expected NativePointer or ObjC.Object instance");
     }
