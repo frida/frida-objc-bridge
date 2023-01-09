@@ -769,7 +769,8 @@ function Runtime() {
                     method = {
                         sel: sel,
                         types: details.types,
-                        wrapper: null
+                        wrapper: null,
+                        kind
                     };
                 }
             }
@@ -782,7 +783,8 @@ function Runtime() {
                     method = {
                         sel: sel,
                         handle: methodHandle,
-                        wrapper: null
+                        wrapper: null,
+                        kind
                     };
                 } else {
                     if (isClass() || kind !== '-' || name === "forwardingTargetForSelector:" || name === "methodSignatureForSelector:") {
@@ -816,7 +818,8 @@ function Runtime() {
                     method = {
                         sel,
                         types,
-                        wrapper: null
+                        wrapper: null,
+                        kind
                     };
                 }
             }
@@ -1822,6 +1825,13 @@ function Runtime() {
         m.argumentTypes = signature.argTypes.map(t => t.type);
 
         m.types = types;
+
+        Object.defineProperty(m, 'symbol', {
+            enumerable: true,
+            get() {
+                return `${method.kind}[${owner.$className} ${selectorAsString(sel)}]`;
+            }
+        });
 
         m.clone = function (options) {
             return makeMethodInvocationWrapper(method, owner, superSpecifier, options);
