@@ -861,7 +861,7 @@ TESTCASE (proxy_instance_responds_to_selector_for_optional_methods_works)
       "send(calculator.respondsToSelector_(sel));"
       "pool.release();",
       calc);
-  EXPECT_SEND_MESSAGE_WITH ("1");
+  EXPECT_SEND_MESSAGE_WITH ("true");
 }
 
 @interface FridaTest1 : NSObject
