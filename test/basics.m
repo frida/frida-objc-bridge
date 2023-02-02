@@ -387,7 +387,7 @@ TESTCASE (class_can_be_implemented)
   const gchar * class_name = "FridaJSCalculator";
 
   COMPILE_AND_LOAD_SCRIPT (
-      "var FridaJSCalculator = ObjC.registerClass({"
+      "global.FridaJSCalculator = ObjC.registerClass({"
           "name: \"%s\","
           "super: ObjC.classes.NSObject,"
           "protocols: [ObjC.protocols.FridaCalculator],"
