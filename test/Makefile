@@ -7,7 +7,7 @@ IOS_PREFIX = /usr/local/opt/frida-objc-bridge-tests-$(IOS_ARCH)
 frida_version := 16.0.8
 
 cflags := -Wall -pipe -Os -g
-ldflags := -Wl,-framework,Foundation -lfrida-gumjs -lresolv -Wl,-dead_strip
+ldflags := -Wl,-exported_symbols_list,runner.symbols -Wl,-framework,Foundation -lfrida-gumjs -lresolv -Wl,-dead_strip
 toolchain := $(shell dirname $(shell dirname $(shell dirname $(shell xcrun --toolchain XcodeDefault -f swift))))
 
 macos_cc := $(shell xcrun --sdk macosx -f clang)
