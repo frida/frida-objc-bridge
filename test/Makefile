@@ -13,10 +13,8 @@ toolchain := $(shell dirname $(shell dirname $(shell dirname $(shell xcrun --too
 macos_cc := $(shell xcrun --sdk macosx -f clang)
 macos_swift := $(shell xcrun --sdk macosx -f swift)
 macos_sdk := $(shell xcrun --sdk macosx --show-sdk-path)
-macos_cflags := -isysroot "$(macos_sdk)" -arch x86_64 $(cflags) -DHAVE_MACOS -DHAVE_V8
-macos_runtimedir := $(toolchain)/usr/lib/swift-5.0/macosx
-macos_swift_runtimedir := /usr/lib/swift
-macos_ldflags := "-L$(macos_runtimedir)" -lswiftObjectiveC "-Wl,-rpath,$(macos_swift_runtimedir),-rpath,$(macos_runtimedir)" $(ldflags)
+macos_cflags := -isysroot "$(macos_sdk)" -arch arm64 $(cflags) -DHAVE_MACOS
+macos_ldflags := -L/usr/lib/swift -lc++ $(ldflags)
 
 ios_cc := $(shell xcrun --sdk iphoneos -f clang)
 ios_swift := $(shell xcrun --sdk iphoneos -f swift)
@@ -47,20 +45,20 @@ all: run-macos
 clean:
 	rm -rf build
 
-build-macos: build/macos-x86_64/runner
+build-macos: build/macos-arm64/runner
 build-ios: build/ios-$(IOS_ARCH)/runner
 
-run-macos: build/macos-x86_64/runner build/frida-objc-bridge.js
+run-macos: build/macos-arm64/runner build/frida-objc-bridge.js
 	$< $(RUNNER_ARGS)
 run-ios: build/ios-$(IOS_ARCH)/runner build/frida-objc-bridge.js build/ios-$(IOS_ARCH)/.swift-runtime-stamp
 	cd build/ios-$(IOS_ARCH)/ && rsync -rLz runner ../frida-objc-bridge.js *.dylib "$(IOS_HOST):$(IOS_PREFIX)/"
 	ssh $(IOS_HOST) "$(IOS_PREFIX)/runner $(RUNNER_ARGS)"
 
-watch-macos: build/macos-x86_64/runner build/frida-objc-bridge.js
+watch-macos: build/macos-arm64/runner build/frida-objc-bridge.js
 	npm run watch &
 	./node_modules/.bin/chokidar \
 		build/frida-objc-bridge.js \
-		-c 'build/macos-x86_64/runner $(RUNNER_ARGS)'
+		-c 'build/macos-arm64/runner $(RUNNER_ARGS)'
 watch-ios: build/ios-$(IOS_ARCH)/runner build/frida-objc-bridge.js
 	npm run watch &
 	./node_modules/.bin/chokidar \
@@ -68,13 +66,13 @@ watch-ios: build/ios-$(IOS_ARCH)/runner build/frida-objc-bridge.js
 		-c 'scp build/frida-objc-bridge.js "$(IOS_HOST):$(IOS_PREFIX)/" \
 			&& ssh $(IOS_HOST) "$(IOS_PREFIX)/runner $(RUNNER_ARGS)"'
 
-build/macos-x86_64/runner: $(objc_sources) $(objc_headers) build/macos-x86_64/taylor.o build/macos-x86_64/libfrida-gumjs.a
+build/macos-arm64/runner: $(objc_sources) $(objc_headers) build/macos-arm64/taylor.o build/macos-arm64/libfrida-gumjs.a
 	"$(macos_cc)" \
 		$(macos_cflags) \
 		$(objc_sources) \
-		build/macos-x86_64/taylor.o \
+		build/macos-arm64/taylor.o \
 		-o $@ \
-		-Ibuild/macos-x86_64 -Lbuild/macos-x86_64 \
+		-Ibuild/macos-arm64 -Lbuild/macos-arm64 \
 		$(macos_ldflags)
 build/ios-$(IOS_ARCH)/runner: $(objc_sources) $(objc_headers) build/ios-$(IOS_ARCH)/taylor.o runner.xcent build/ios-$(IOS_ARCH)/libfrida-gumjs.a
 	"$(ios_cc)" \
@@ -86,7 +84,7 @@ build/ios-$(IOS_ARCH)/runner: $(objc_sources) $(objc_headers) build/ios-$(IOS_AR
 		$(ios_ldflags)
 	"$(ios_codesign)" -f -s "$$IOS_CERTID" --entitlements runner.xcent $@
 
-build/macos-x86_64/taylor.o: taylor.swift
+build/macos-arm64/taylor.o: taylor.swift
 	@mkdir -p $(@D)
 	"$(macos_swift)" \
 		-frontend \
@@ -94,8 +92,8 @@ build/macos-x86_64/taylor.o: taylor.swift
 		-primary-file taylor.swift \
 		-sdk "$(macos_sdk)" \
 		-module-name FridaObjCTests \
-		-emit-module-path build/macos-x86_64/FridaObjCTests.swiftmodule \
-		-emit-objc-header-path build/macos-x86_64/taylor.h \
+		-emit-module-path build/macos-arm64/FridaObjCTests.swiftmodule \
+		-emit-objc-header-path build/macos-arm64/taylor.h \
 		-enable-testing \
 		-enable-objc-interop \
 		-parse-as-library \
