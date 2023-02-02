@@ -10,6 +10,7 @@ function Runtime() {
     const realizedClasses = new Set();
     const classRegistry = new ClassRegistry();
     const protocolRegistry = new ProtocolRegistry();
+    const methodCaches = new Map();
     const replacedMethods = new Map();
     const scheduledWork = new Map();
     let nextId = 1;
@@ -308,7 +309,10 @@ function Runtime() {
                 numCachedClasses++;
             }
 
-            return new ObjCObject(handle, undefined, true);
+            return new ObjCObject(handle, undefined, {
+                state: 'realized',
+                cachedIsClass: true,
+            });
         }
 
         function toJSON() {
@@ -446,26 +450,83 @@ function Runtime() {
         "$ivars"
     ]);
 
-    function ObjCObject(handle, protocol, cachedIsClass, superSpecifier) {
-        let cachedClassHandle = null;
-        let cachedKind = null;
-        let cachedSuper = null;
-        let cachedSuperClass = null;
-        let cachedClass = null;
-        let cachedClassName = null;
-        let cachedModuleName = null;
-        let cachedProtocols = null;
-        let cachedMethodNames = null;
-        let cachedProtocolMethods = null;
-        let respondsToSelector = null;
-        const cachedMethods = {};
-        let cachedNativeMethodNames = null;
-        let cachedOwnMethodNames = null;
-        let cachedIvars = null;
+    const objcObjectHandler = {
+        has(target, property) {
+            return target.hasProperty(property);
+        },
+        get(target, property, receiver) {
+            switch (property) {
+                case "handle":
+                    return target.handle;
+                case "prototype":
+                    return target.prototype;
+                case "constructor":
+                    return target.constructor;
+                case "hasOwnProperty":
+                    return target.hasProperty.bind(target);
+                case "toJSON":
+                    return target.toJSON.bind(target);
+                case "toString":
+                case "valueOf":
+                    const descriptionImpl = receiver.description;
+                    if (descriptionImpl !== undefined) {
+                        const description = descriptionImpl.call(receiver);
+                        if (description !== null)
+                            return description.UTF8String.bind(description);
+                    }
+                    return function () {
+                        return receiver.$className;
+                    };
+                case "equals":
+                    return target.equals.bind(target);
+                case "$inner":
+                    return target;
+                case "$kind":
+                    return target.getKind();
+                case "$super":
+                    return target.getSuper();
+                case "$superClass":
+                    return target.getSuperClass();
+                case "$class":
+                    return target.getClass();
+                case "$className":
+                    return target.getClassName();
+                case "$moduleName":
+                    return target.getModuleName();
+                case "$protocols":
+                    return target.getProtocols();
+                case "$methods":
+                    return target.getMethodNames();
+                case "$ownMethods":
+                    return target.getOwnMethodNames();
+                case "$ivars":
+                    return target.getIvars();
+                default:
+                    return target.resolveProperty(property);
+            }
+        },
+        set(target, property, value, receiver) {
+            return false;
+        },
+        ownKeys(target) {
+            return target.getVisiblePropertyNames();
+        },
+        getOwnPropertyDescriptor(target, property) {
+            return {
+                writable: false,
+                configurable: true,
+                enumerable: true
+            };
+        },
+    };
 
-        handle = getHandle(handle);
+    function ObjCObject(handle, protocol, { state = 'unknown', cachedIsClass, superSpecifier } = {}) {
+        this.handle = getHandle(handle);
+        this.protocol = protocol;
+        this.cachedIsClass = cachedIsClass;
+        this.superSpecifier = superSpecifier;
 
-        if (cachedIsClass === undefined) {
+        if (state === 'unknown') {
             // We need to ensure the class is realized, otherwise calling APIs like object_isClass() will crash.
             // The first message delivery will realize the class, but users intercepting calls to objc_msgSend()
             // and inspecting the first argument will run into this situation.
@@ -477,279 +538,308 @@ function Runtime() {
             }
         }
 
-        const self = new Proxy(this, {
-            has(target, property) {
-                return hasProperty(property);
-            },
-            get(target, property, receiver) {
-                switch (property) {
-                    case "handle":
-                        return handle;
-                    case "prototype":
-                        return target.prototype;
-                    case "constructor":
-                        return target.constructor;
-                    case "hasOwnProperty":
-                        return hasProperty;
-                    case "toJSON":
-                        return toJSON;
-                    case "toString":
-                    case "valueOf":
-                        const descriptionImpl = receiver.description;
-                        if (descriptionImpl !== undefined) {
-                            const description = descriptionImpl.call(receiver);
-                            if (description !== null)
-                                return description.UTF8String.bind(description);
-                        }
-                        return function () {
-                            return receiver.$className;
-                        };
-                    case "equals":
-                        return equals;
-                    case "$kind":
-                        if (cachedKind === null) {
-                            if (isClass())
-                                cachedKind = api.class_isMetaClass(handle) ? 'meta-class' : 'class';
-                            else
-                                cachedKind = 'instance';
-                        }
-                        return cachedKind;
-                    case "$super":
-                        if (cachedSuper === null) {
-                            const superHandle = api.class_getSuperclass(classHandle());
-                            if (!superHandle.isNull()) {
-                                const specifier = Memory.alloc(2 * pointerSize);
-                                specifier.writePointer(handle);
-                                specifier.add(pointerSize).writePointer(superHandle);
-                                cachedSuper = [new ObjCObject(handle, undefined, cachedIsClass, specifier)];
-                            } else {
-                                cachedSuper = [null];
-                            }
-                        }
-                        return cachedSuper[0];
-                    case "$superClass":
-                        if (cachedSuperClass === null) {
-                            const superClassHandle = api.class_getSuperclass(classHandle());
-                            if (!superClassHandle.isNull()) {
-                                cachedSuperClass = [new ObjCObject(superClassHandle)];
-                            } else {
-                                cachedSuperClass = [null];
-                            }
-                        }
-                        return cachedSuperClass[0];
-                    case "$class":
-                        if (cachedClass === null)
-                            cachedClass = new ObjCObject(api.object_getClass(handle), undefined, true);
-                        return cachedClass;
-                    case "$className":
-                        if (cachedClassName === null) {
-                            if (superSpecifier)
-                                cachedClassName = api.class_getName(superSpecifier.add(pointerSize).readPointer()).readUtf8String();
-                            else if (isClass())
-                                cachedClassName = api.class_getName(handle).readUtf8String();
-                            else
-                                cachedClassName = api.object_getClassName(handle).readUtf8String();
-                        }
-                        return cachedClassName;
-                    case "$moduleName":
-                        if (cachedModuleName === null) {
-                            cachedModuleName = api.class_getImageName(classHandle()).readUtf8String();
-                        }
-                        return cachedModuleName;
-                    case "$protocols":
-                        if (cachedProtocols === null) {
-                            cachedProtocols = {};
-                            const numProtocolsBuf = Memory.alloc(pointerSize);
-                            const protocolHandles = api.class_copyProtocolList(classHandle(), numProtocolsBuf);
-                            if (!protocolHandles.isNull()) {
-                                try {
-                                    const numProtocols = numProtocolsBuf.readUInt();
-                                    for (let i = 0; i !== numProtocols; i++) {
-                                        const protocolHandle = protocolHandles.add(i * pointerSize).readPointer();
-                                        const p = new ObjCProtocol(protocolHandle);
-                                        cachedProtocols[p.name] = p;
-                                    }
-                                } finally {
-                                    api.free(protocolHandles);
-                                }
-                            }
-                        }
-                        return cachedProtocols;
-                    case "$methods":
-                        if (cachedNativeMethodNames === null) {
-                            const klass = superSpecifier ? superSpecifier.add(pointerSize).readPointer() : classHandle();
-                            const meta = api.object_getClass(klass);
-
-                            const names = new Set();
-
-                            let cur = meta;
-                            do {
-                                for (let methodName of collectMethodNames(cur, "+ "))
-                                    names.add(methodName);
-                                cur = api.class_getSuperclass(cur);
-                            } while (!cur.isNull());
-
-                            cur = klass;
-                            do {
-                                for (let methodName of collectMethodNames(cur, "- "))
-                                    names.add(methodName);
-                                cur = api.class_getSuperclass(cur);
-                            } while (!cur.isNull());
-
-                            cachedNativeMethodNames = Array.from(names);
-                        }
-                        return cachedNativeMethodNames;
-                    case "$ownMethods":
-                        if (cachedOwnMethodNames === null) {
-                            const klass = superSpecifier ? superSpecifier.add(pointerSize).readPointer() : classHandle();
-                            const meta = api.object_getClass(klass);
-
-                            const classMethods = collectMethodNames(meta, "+ ");
-                            const instanceMethods = collectMethodNames(klass, "- ");
-
-                            cachedOwnMethodNames = classMethods.concat(instanceMethods);
-                        }
-                        return cachedOwnMethodNames;
-                    case "$ivars":
-                        if (cachedIvars === null) {
-                            if (isClass())
-                                cachedIvars = {};
-                            else
-                                cachedIvars = new ObjCIvars(self, classHandle());
-                        }
-                        return cachedIvars;
-                    default:
-                        if (typeof property === "symbol") {
-                            return target[property];
-                        }
-                        if (protocol) {
-                            const details = findProtocolMethod(property);
-                            if (details === null || !details.implemented)
-                                return undefined;
-                        }
-                        const wrapper = findMethodWrapper(property);
-                        if (wrapper === null)
-                            return undefined;
-                        return wrapper;
-                }
-            },
-            set(target, property, value, receiver) {
-                return false;
-            },
-            ownKeys(target) {
-                if (cachedMethodNames === null) {
-                    if (!protocol) {
-                        const jsNames = {};
-                        const nativeNames = {};
-
-                        let cur = api.object_getClass(handle);
-                        do {
-                            const numMethodsBuf = Memory.alloc(pointerSize);
-                            const methodHandles = api.class_copyMethodList(cur, numMethodsBuf);
-                            const fullNamePrefix = isClass() ? "+ " : "- ";
-                            try {
-                                const numMethods = numMethodsBuf.readUInt();
-                                for (let i = 0; i !== numMethods; i++) {
-                                    const methodHandle = methodHandles.add(i * pointerSize).readPointer();
-                                    const sel = api.method_getName(methodHandle);
-                                    const nativeName = api.sel_getName(sel).readUtf8String();
-                                    if (nativeNames[nativeName] !== undefined)
-                                        continue;
-                                    nativeNames[nativeName] = nativeName;
-
-                                    const jsName = jsMethodName(nativeName);
-                                    let serial = 2;
-                                    let name = jsName;
-                                    while (jsNames[name] !== undefined) {
-                                        serial++;
-                                        name = jsName + serial;
-                                    }
-                                    jsNames[name] = true;
-
-                                    const fullName = fullNamePrefix + nativeName;
-                                    if (cachedMethods[fullName] === undefined) {
-                                        const details = {
-                                            sel: sel,
-                                            handle: methodHandle,
-                                            wrapper: null
-                                        };
-                                        cachedMethods[fullName] = details;
-                                        cachedMethods[name] = details;
-                                    }
-                                }
-                            } finally {
-                                api.free(methodHandles);
-                            }
-                            cur = api.class_getSuperclass(cur);
-                        } while (!cur.isNull());
-
-                        cachedMethodNames = Object.keys(jsNames);
-                    } else {
-                        const methodNames = [];
-
-                        const protocolMethods = allProtocolMethods();
-                        Object.keys(protocolMethods).forEach(function (methodName) {
-                            if (methodName[0] !== '+' && methodName[0] !== '-') {
-                                const details = protocolMethods[methodName];
-                                if (details.implemented) {
-                                    methodNames.push(methodName);
-                                }
-                            }
-                        });
-
-                        cachedMethodNames = methodNames;
-                    }
-                }
-
-                return ['handle'].concat(cachedMethodNames);
-            },
-            getOwnPropertyDescriptor(target, property) {
-                return {
-                    writable: false,
-                    configurable: true,
-                    enumerable: true
-                };
-            },
-        });
-
-        if (protocol) {
-            respondsToSelector = !isClass() ? findMethodWrapper("- respondsToSelector:") : null;
+        if (protocol !== undefined) {
+            this.respondsToSelector = !this.isClass() ? this.findMethodWrapper("- respondsToSelector:") : null;
         }
 
-        return self;
+        return new Proxy(this, objcObjectHandler);
+    }
 
-        function hasProperty(name) {
+    Object.assign(ObjCObject.prototype, {
+        hasProperty(name) {
             if (objCObjectBuiltins.has(name))
                 return true;
-            if (protocol) {
-                const details = findProtocolMethod(name);
+            if (this.protocol !== undefined) {
+                const details = this.findProtocolMethod(name);
                 return !!(details !== null && details.implemented);
             }
-            return findMethod(name) !== null;
-        }
+            return this.findMethod(name) !== null;
+        },
 
-        function classHandle() {
-            if (cachedClassHandle === null)
-                cachedClassHandle = isClass() ? handle : api.object_getClass(handle);
+        resolveProperty(property) {
+            if (typeof property === "symbol") {
+                return this[property];
+            }
+            if (this.protocol !== undefined) {
+                const details = this.findProtocolMethod(property);
+                if (details === null || !details.implemented)
+                    return undefined;
+            }
+            const wrapper = this.findMethodWrapper(property);
+            if (wrapper === null)
+                return undefined;
+            return wrapper;
+        },
+
+        getVisiblePropertyNames() {
+            let {cachedMethodNames} = this;
+            if (cachedMethodNames === undefined) {
+                if (this.protocol === undefined) {
+                    const jsNames = {};
+                    const nativeNames = {};
+
+                    const isClass = this.isClass();
+                    const cachedMethods = this.getCachedMethods();
+
+                    let cur = api.object_getClass(this.handle);
+                    do {
+                        const numMethodsBuf = Memory.alloc(pointerSize);
+                        const methodHandles = api.class_copyMethodList(cur, numMethodsBuf);
+                        const fullNamePrefix = isClass ? "+ " : "- ";
+                        try {
+                            const numMethods = numMethodsBuf.readUInt();
+                            for (let i = 0; i !== numMethods; i++) {
+                                const methodHandle = methodHandles.add(i * pointerSize).readPointer();
+                                const sel = api.method_getName(methodHandle);
+                                const nativeName = api.sel_getName(sel).readUtf8String();
+                                if (nativeNames[nativeName] !== undefined)
+                                    continue;
+                                nativeNames[nativeName] = nativeName;
+
+                                const jsName = jsMethodName(nativeName);
+                                let serial = 2;
+                                let name = jsName;
+                                while (jsNames[name] !== undefined) {
+                                    serial++;
+                                    name = jsName + serial;
+                                }
+                                jsNames[name] = true;
+
+                                const fullName = fullNamePrefix + nativeName;
+                                if (cachedMethods[fullName] === undefined) {
+                                    const details = {
+                                        sel: sel,
+                                        handle: methodHandle,
+                                        wrapper: null
+                                    };
+                                    cachedMethods[fullName] = details;
+                                    cachedMethods[name] = details;
+                                }
+                            }
+                        } finally {
+                            api.free(methodHandles);
+                        }
+                        cur = api.class_getSuperclass(cur);
+                    } while (!cur.isNull());
+
+                    cachedMethodNames = Object.keys(jsNames);
+                } else {
+                    const methodNames = [];
+
+                    const protocolMethods = this.allProtocolMethods();
+                    Object.keys(protocolMethods).forEach(function (methodName) {
+                        if (methodName[0] !== '+' && methodName[0] !== '-') {
+                            const details = protocolMethods[methodName];
+                            if (details.implemented) {
+                                methodNames.push(methodName);
+                            }
+                        }
+                    });
+
+                    cachedMethodNames = methodNames;
+                }
+                this.cachedMethodNames = cachedMethodNames;
+            }
+
+            return ['handle'].concat(cachedMethodNames);
+        },
+
+        getKind() {
+            let {cachedKind} = this;
+            if (cachedKind === undefined) {
+                if (this.isClass())
+                    cachedKind = api.class_isMetaClass(this.handle) ? 'meta-class' : 'class';
+                else
+                    cachedKind = 'instance';
+                this.cachedKind = cachedKind;
+            }
+            return cachedKind;
+        },
+
+        classHandle() {
+            let {cachedClassHandle} = this;
+            if (cachedClassHandle === undefined) {
+                cachedClassHandle = this.isClass() ? this.handle : api.object_getClass(this.handle);
+                this.cachedClassHandle = cachedClassHandle;
+            }
             return cachedClassHandle;
-        }
+        },
 
-        function isClass() {
+        isClass() {
+            let {cachedIsClass} = this;
             if (cachedIsClass === undefined) {
                 if (api.object_isClass)
-                    cachedIsClass = !!api.object_isClass(handle);
+                    cachedIsClass = !!api.object_isClass(this.handle);
                 else
-                    cachedIsClass = !!api.class_isMetaClass(api.object_getClass(handle));
+                    cachedIsClass = !!api.class_isMetaClass(api.object_getClass(this.handle));
+                this.cachedIsClass = cachedIsClass;
             }
             return cachedIsClass;
-        }
+        },
 
-        function findMethod(rawName) {
+        getSuper() {
+            let {cachedSuper} = this;
+            if (cachedSuper === undefined) {
+                const superHandle = api.class_getSuperclass(this.classHandle());
+                if (!superHandle.isNull()) {
+                    const {handle} = this;
+                    const specifier = Memory.alloc(2 * pointerSize);
+                    specifier.writePointer(handle);
+                    specifier.add(pointerSize).writePointer(superHandle);
+                    cachedSuper = new ObjCObject(handle, undefined, {
+                        state: 'realized',
+                        cachedIsClass: this.cachedIsClass,
+                        superSpecifier: specifier,
+                    });
+                } else {
+                    cachedSuper = null;
+                }
+                this.cachedSuper = cachedSuper;
+            }
+            return cachedSuper;
+        },
+
+        getSuperClass() {
+            let {cachedSuperClass} = this;
+            if (cachedSuperClass === undefined) {
+                const superClassHandle = api.class_getSuperclass(this.classHandle());
+                if (!superClassHandle.isNull()) {
+                    cachedSuperClass = new ObjCObject(superClassHandle, undefined, {
+                        state: 'realized',
+                        cachedIsClass: true,
+                    });
+                } else {
+                    cachedSuperClass = null;
+                }
+                this.cachedSuperClass = cachedSuperClass;
+            }
+            return cachedSuperClass;
+        },
+
+        getClass() {
+            let {cachedClass} = this;
+            if (cachedClass === undefined) {
+                cachedClass = new ObjCObject(api.object_getClass(this.handle), undefined, {
+                    state: 'realized',
+                    cachedIsClass: true,
+                });
+                this.cachedClass = cachedClass;
+            }
+            return cachedClass;
+        },
+
+        getClassName() {
+            let {cachedClassName} = this;
+            if (cachedClassName === undefined) {
+                const {superSpecifier} = this;
+                if (superSpecifier !== undefined)
+                    cachedClassName = api.class_getName(superSpecifier.add(pointerSize).readPointer()).readUtf8String();
+                else if (this.isClass())
+                    cachedClassName = api.class_getName(this.handle).readUtf8String();
+                else
+                    cachedClassName = api.object_getClassName(this.handle).readUtf8String();
+                this.cachedClassName = cachedClassName;
+            }
+            return cachedClassName;
+        },
+
+        getModuleName() {
+            let {cachedModuleName} = this;
+            if (cachedModuleName === undefined) {
+                cachedModuleName = api.class_getImageName(this.classHandle()).readUtf8String();
+                this.cachedModuleName = cachedModuleName;
+            }
+            return cachedModuleName;
+        },
+
+        getProtocols() {
+            let {cachedProtocols} = this;
+            if (cachedProtocols === undefined) {
+                cachedProtocols = {};
+                const numProtocolsBuf = Memory.alloc(pointerSize);
+                const protocolHandles = api.class_copyProtocolList(this.classHandle(), numProtocolsBuf);
+                if (!protocolHandles.isNull()) {
+                    try {
+                        const numProtocols = numProtocolsBuf.readUInt();
+                        for (let i = 0; i !== numProtocols; i++) {
+                            const protocolHandle = protocolHandles.add(i * pointerSize).readPointer();
+                            const p = new ObjCProtocol(protocolHandle);
+                            cachedProtocols[p.name] = p;
+                        }
+                    } finally {
+                        api.free(protocolHandles);
+                    }
+                }
+                this.cachedProtocols = cachedProtocols;
+            }
+            return cachedProtocols;
+        },
+
+        getMethodNames() {
+            let {cachedNativeMethodNames} = this;
+            if (cachedNativeMethodNames === undefined) {
+                const {superSpecifier} = this;
+                const klass = (superSpecifier !== undefined) ? superSpecifier.add(pointerSize).readPointer() : this.classHandle();
+                const meta = api.object_getClass(klass);
+
+                const names = new Set();
+
+                let cur = meta;
+                do {
+                    for (let methodName of collectMethodNames(cur, "+ "))
+                        names.add(methodName);
+                    cur = api.class_getSuperclass(cur);
+                } while (!cur.isNull());
+
+                cur = klass;
+                do {
+                    for (let methodName of collectMethodNames(cur, "- "))
+                        names.add(methodName);
+                    cur = api.class_getSuperclass(cur);
+                } while (!cur.isNull());
+
+                cachedNativeMethodNames = Array.from(names);
+                this.cachedNativeMethodNames = cachedNativeMethodNames;
+            }
+            return cachedNativeMethodNames;
+        },
+
+        getOwnMethodNames() {
+            let {cachedOwnMethodNames} = this;
+            if (cachedOwnMethodNames === undefined) {
+                const {superSpecifier} = this;
+                const klass = (superSpecifier !== undefined) ? superSpecifier.add(pointerSize).readPointer() : this.classHandle();
+                const meta = api.object_getClass(klass);
+
+                const classMethods = collectMethodNames(meta, "+ ");
+                const instanceMethods = collectMethodNames(klass, "- ");
+
+                cachedOwnMethodNames = classMethods.concat(instanceMethods);
+                this.cachedOwnMethodNames = cachedOwnMethodNames;
+            }
+            return cachedOwnMethodNames;
+        },
+
+        getIvars() {
+            let {cachedIvars} = this;
+            if (cachedIvars === undefined) {
+                if (this.isClass())
+                    cachedIvars = {};
+                else
+                    cachedIvars = new ObjCIvars(this, this.classHandle());
+                this.cachedIvars = cachedIvars;
+            }
+            return cachedIvars;
+        },
+
+        findMethod(rawName) {
+            const cachedMethods = this.getCachedMethods();
+
             let method = cachedMethods[rawName];
             if (method !== undefined)
                 return method;
 
-            const tokens = parseMethodName(rawName);
+            const tokens = this.parseMethodName(rawName);
             const fullName = tokens[2];
 
             method = cachedMethods[fullName];
@@ -761,10 +851,11 @@ function Runtime() {
             const kind = tokens[0];
             const name = tokens[1];
             const sel = selector(name);
-            const defaultKind = isClass() ? '+' : '-';
+            const isClass = this.isClass();
+            const defaultKind = isClass ? '+' : '-';
 
-            if (protocol) {
-                const details = findProtocolMethod(fullName);
+            if (this.protocol !== undefined) {
+                const details = this.findProtocolMethod(fullName);
                 if (details !== null) {
                     method = {
                         sel: sel,
@@ -777,8 +868,8 @@ function Runtime() {
 
             if (method === undefined) {
                 const methodHandle = (kind === '+') ?
-                    api.class_getClassMethod(classHandle(), sel) :
-                    api.class_getInstanceMethod(classHandle(), sel);
+                    api.class_getClassMethod(this.classHandle(), sel) :
+                    api.class_getInstanceMethod(this.classHandle(), sel);
                 if (!methodHandle.isNull()) {
                     method = {
                         sel: sel,
@@ -787,13 +878,14 @@ function Runtime() {
                         kind
                     };
                 } else {
-                    if (isClass() || kind !== '-' || name === "forwardingTargetForSelector:" || name === "methodSignatureForSelector:") {
+                    if (isClass || kind !== '-' || name === "forwardingTargetForSelector:" || name === "methodSignatureForSelector:") {
                         return null;
                     }
 
-                    let target = self;
-                    if ("- forwardingTargetForSelector:" in self) {
-                        const forwardingTarget = self.forwardingTargetForSelector_(sel);
+                    let target = this;
+                    const forwardingTargetForSelector = this.resolveProperty('- forwardingTargetForSelector:');
+                    if (forwardingTargetForSelector !== undefined) {
+                        const forwardingTarget = forwardingTargetForSelector.call(this, sel);
                         if (forwardingTarget !== null && forwardingTarget.$kind === 'instance') {
                             target = forwardingTarget;
                         } else {
@@ -811,7 +903,7 @@ function Runtime() {
                     if (types === null || types === "") {
                         types = stealTypesFromProtocols(target, fullName);
                         if (types === null)
-                            types = stealTypesFromProtocols(self, fullName);
+                            types = stealTypesFromProtocols(this, fullName);
                         if (types === null)
                             return null;
                     }
@@ -830,45 +922,41 @@ function Runtime() {
                 cachedMethods[jsMethodName(name)] = method;
 
             return method;
-        }
+        },
 
-        function stealTypesFromProtocols(klass, fullName) {
-            const candidates = Object.keys(klass.$protocols)
-                .map(protocolName => flatProtocolMethods({}, klass.$protocols[protocolName]))
-                .reduce((allMethods, methods) => {
-                    Object.assign(allMethods, methods);
-                    return allMethods;
-                }, {});
-
-            const method = candidates[fullName];
-            if (method === undefined) {
-                return null;
+        getCachedMethods() {
+            let {cachedMethods} = this;
+            if (cachedMethods === undefined) {
+                const {superSpecifier} = this;
+                const classHandle = (superSpecifier !== undefined)
+                    ? superSpecifier.add(pointerSize).readPointer()
+                    : api.object_getClass(this.handle);
+                const cacheKey = classHandle.toString(16);
+                cachedMethods = methodCaches.get(cacheKey);
+                if (cachedMethods === undefined) {
+                    cachedMethods = {};
+                    methodCaches.set(cacheKey, cachedMethods);
+                }
+                this.cachedMethods = cachedMethods;
             }
-            return method.types;
-        }
+            return cachedMethods;
+        },
 
-        function flatProtocolMethods(result, protocol) {
-            if (protocol.methods !== undefined) {
-                Object.assign(result, protocol.methods);
-            }
-            if (protocol.protocol !== undefined) {
-                flatProtocolMethods(result, protocol.protocol);
-            }
-            return result;
-        }
-
-        function findProtocolMethod(rawName) {
-            const protocolMethods = allProtocolMethods();
+        findProtocolMethod(rawName) {
+            const protocolMethods = this.allProtocolMethods();
             const details = protocolMethods[rawName];
             return (details !== undefined) ? details : null;
-        }
+        },
 
-        function allProtocolMethods() {
-            if (cachedProtocolMethods === null) {
+        allProtocolMethods() {
+            let {cachedProtocolMethods} = this;
+            if (cachedProtocolMethods === undefined) {
                 const methods = {};
 
-                const protocols = collectProtocols(protocol);
-                const defaultKind = isClass() ? '+' : '-';
+                const {respondsToSelector} = this;
+
+                const protocols = collectProtocols(this.protocol);
+                const defaultKind = this.isClass() ? '+' : '-';
                 Object.keys(protocols).forEach(function (name) {
                     const p = protocols[name];
                     const m = p.methods;
@@ -888,7 +976,7 @@ function Runtime() {
                                     if (method.required) {
                                         implemented = true;
                                     } else {
-                                        implemented = (respondsToSelector !== null && respondsToSelector.call(self, selector(methodName)));
+                                        implemented = respondsToSelector?.call(self, selector(methodName)) ?? false;
                                     }
                                     didCheckImplemented = true;
                                 }
@@ -903,28 +991,29 @@ function Runtime() {
                 });
 
                 cachedProtocolMethods = methods;
+                this.cachedProtocolMethods = cachedProtocolMethods;
             }
 
             return cachedProtocolMethods;
-        }
+        },
 
-        function findMethodWrapper(name) {
-            const method = findMethod(name);
+        findMethodWrapper(name) {
+            const method = this.findMethod(name);
             if (method === null)
                 return null;
             let wrapper = method.wrapper;
             if (wrapper === null) {
-                wrapper = makeMethodInvocationWrapper(method, self, superSpecifier, defaultInvocationOptions);
+                wrapper = makeMethodInvocationWrapper(method, this, this.superSpecifier, defaultInvocationOptions);
                 method.wrapper = wrapper;
             }
             return wrapper;
-        }
+        },
 
-        function parseMethodName(rawName) {
+        parseMethodName(rawName) {
             const match = /([+\-])\s(\S+)/.exec(rawName);
             let name, kind;
             if (match === null) {
-                kind = isClass() ? '+' : '-';
+                kind = this.isClass() ? '+' : '-';
                 name = objcMethodName(rawName);
             } else {
                 kind = match[1];
@@ -932,18 +1021,18 @@ function Runtime() {
             }
             const fullName = [kind, name].join(' ');
             return [kind, name, fullName];
-        }
+        },
 
-        function toJSON() {
+        toJSON() {
             return {
-                handle: handle.toString()
+                handle: this.handle.toString()
             };
-        }
+        },
 
-        function equals(ptr) {
-            return handle.equals(getHandle(ptr));
-        }
-    }
+        equals(ptr) {
+            return this.handle.equals(getHandle(ptr));
+        },
+    });
 
     function getReplacementMethodImplementation(methodHandle) {
         const existingEntry = replacedMethods.get(methodHandle.toString());
@@ -989,6 +1078,31 @@ function Runtime() {
         }
 
         return names;
+    }
+
+    function stealTypesFromProtocols(klass, fullName) {
+        const candidates = Object.values(klass.getProtocols())
+            .map(protocol => flatProtocolMethods({}, protocol))
+            .reduce((allMethods, methods) => {
+                Object.assign(allMethods, methods);
+                return allMethods;
+            }, {});
+
+        const method = candidates[fullName];
+        if (method === undefined) {
+            return null;
+        }
+        return method.types;
+    }
+
+    function flatProtocolMethods(result, protocol) {
+        if (protocol.methods !== undefined) {
+            Object.assign(result, protocol.methods);
+        }
+        if (protocol.protocol !== undefined) {
+            flatProtocolMethods(result, protocol.protocol);
+        }
+        return result;
     }
 
     function ObjCProtocol(handle) {
@@ -1482,7 +1596,7 @@ function Runtime() {
         const methods = properties.methods || {};
         const methodCallbacks = [];
 
-        const classHandle = api.objc_allocateClassPair(superClass !== null ? superClass.handle : NULL, Memory.allocUtf8String(name), ptr("0"));
+        const classHandle = api.objc_allocateClassPair(superClass !== null ? superClass.handle : NULL, Memory.allocUtf8String(name), NULL);
         if (classHandle.isNull())
             throw new Error("Unable to register already registered class '" + name + "'");
         const metaClassHandle = api.object_getClass(classHandle);
@@ -1542,12 +1656,14 @@ function Runtime() {
         }
         api.objc_registerClassPair(classHandle);
 
+        const wrapper = new ObjCObject(classHandle);
+
+        Script.bindWeak(wrapper, makeClassDestructor(classHandle));
+
         // Keep a reference to the callbacks so they don't get GCed
-        classHandle._methodCallbacks = methodCallbacks;
+        wrapper.$inner._methodCallbacks = methodCallbacks;
 
-        Script.bindWeak(classHandle, makeClassDestructor(ptr(classHandle)));
-
-        return new ObjCObject(classHandle);
+        return wrapper;
     }
 
     function makeClassDestructor(classHandle) {
@@ -1791,7 +1907,9 @@ function Runtime() {
             returnCaptureRight = "";
         }
 
-        const m = eval("var m = function (" + argVariableNames.join(", ") + ") { " +
+        const jsName = `${owner.getClassName()}_${selectorAsString(sel)}`.replace(/[^A-Za-z]/g, '_');
+
+        const m = eval("var m = function " + jsName + "(" + argVariableNames.join(", ") + ") { " +
             returnCaptureLeft + "objc_msgSend(" + callArgs.join(", ") + ")" + returnCaptureRight + ";" +
         " }; m;");
 
@@ -1829,7 +1947,7 @@ function Runtime() {
         Object.defineProperty(m, 'symbol', {
             enumerable: true,
             get() {
-                return `${method.kind}[${owner.$className} ${selectorAsString(sel)}]`;
+                return `${method.kind}[${owner.getClassName()} ${selectorAsString(sel)}]`;
             }
         });
 
@@ -1839,11 +1957,12 @@ function Runtime() {
 
         function getMethodHandle() {
             if (handle === null) {
-                if (owner.$kind === 'instance') {
+                if (owner.getKind() === 'instance') {
                     let cur = owner;
                     do {
-                        if ("- forwardingTargetForSelector:" in cur) {
-                            const target = cur.forwardingTargetForSelector_(sel);
+                        const forwardingTargetForSelector = cur.resolveProperty("- forwardingTargetForSelector:");
+                        if (forwardingTargetForSelector !== undefined) {
+                            const target = forwardingTargetForSelector.call(cur, sel);
                             if (target === null)
                                 break;
                             if (target.$kind !== 'instance')
@@ -1852,7 +1971,7 @@ function Runtime() {
                             if (!h.isNull())
                                 handle = h;
                             else
-                                cur = target;
+                                cur = target.$inner;
                         } else {
                             break;
                         }
@@ -2333,10 +2452,10 @@ function Runtime() {
     const fromNativeId = function (h) {
         if (h.isNull()) {
             return null;
-        } else if (h.toString(16) === this.handle.toString(16)) {
+        } else if (h.equals(this.handle)) {
             return this;
         } else {
-            return new ObjCObject(h);
+            return new ObjCObject(h, undefined, { state: 'realized' });
         }
     };
 
