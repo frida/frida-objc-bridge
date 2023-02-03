@@ -25,6 +25,7 @@ TESTLIST_BEGIN (basics)
   TESTENTRY (ivars_can_be_accessed)
   TESTENTRY (class_method_can_be_invoked)
   TESTENTRY (object_can_be_constructed_from_pointer)
+  TESTENTRY (object_can_be_compared_to_other_object)
   TESTENTRY (string_can_be_constructed)
   TESTENTRY (string_can_be_passed_as_argument)
   TESTENTRY (class_can_be_implemented)
@@ -362,6 +363,22 @@ TESTCASE (object_can_be_constructed_from_pointer)
       "send(str.toString());",
       str);
   EXPECT_SEND_MESSAGE_WITH ("\"Badger\"");
+}
+
+TESTCASE (object_can_be_compared_to_other_object)
+{
+  NSString * s1 = [NSString stringWithUTF8String:"Badger"];
+  NSString * s2 = [NSString stringWithUTF8String:"Snake"];
+
+  COMPILE_AND_LOAD_SCRIPT (
+      "var s1a = new ObjC.Object(" GUM_PTR_CONST ");"
+      "var s1b = new ObjC.Object(" GUM_PTR_CONST ");"
+      "var s2 = new ObjC.Object(" GUM_PTR_CONST ");"
+      "send(s1a.equals(s1b));"
+      "send(s2.equals(s1a));",
+      s1, s1, s2);
+  EXPECT_SEND_MESSAGE_WITH ("true");
+  EXPECT_SEND_MESSAGE_WITH ("false");
 }
 
 TESTCASE (string_can_be_constructed)
