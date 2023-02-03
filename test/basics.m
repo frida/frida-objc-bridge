@@ -17,6 +17,7 @@ TESTLIST_BEGIN (basics)
   TESTENTRY (class_can_be_retrieved)
   TESTENTRY (kind_can_be_retrieved)
   TESTENTRY (super_can_be_retrieved)
+  TESTENTRY (super_class_can_be_retrieved)
   TESTENTRY (class_name_can_be_retrieved)
   TESTENTRY (module_name_can_be_retrieved)
   TESTENTRY (protocols_can_be_retrieved)
@@ -234,11 +235,42 @@ TESTCASE (kind_can_be_retrieved)
   EXPECT_SEND_MESSAGE_WITH ("\"meta-class\"");
 }
 
+@interface FridaShape : NSObject
+@end
+
+@interface FridaCircle : FridaShape
+@end
+
+@implementation FridaShape
+- (NSString *)name { return @"Shape"; }
+@end
+
+@implementation FridaCircle
+- (NSString *)name { return @"Circle"; }
+@end
+
 TESTCASE (super_can_be_retrieved)
 {
+  FridaCircle * circle = [[[FridaCircle alloc] init] autorelease];
+
   COMPILE_AND_LOAD_SCRIPT (
       "send(ObjC.classes.NSDate.$super.$className === \"NSObject\");"
-      "send(ObjC.classes.NSObject.$super === null);");
+      "send(ObjC.classes.NSObject.$super === null);"
+      "var circle = new ObjC.Object(" GUM_PTR_CONST ");"
+      "send(circle.name().toString());"
+      "send(circle.$super.name().toString());",
+      circle);
+  EXPECT_SEND_MESSAGE_WITH ("true");
+  EXPECT_SEND_MESSAGE_WITH ("true");
+  EXPECT_SEND_MESSAGE_WITH ("\"Circle\"");
+  EXPECT_SEND_MESSAGE_WITH ("\"Shape\"");
+}
+
+TESTCASE (super_class_can_be_retrieved)
+{
+  COMPILE_AND_LOAD_SCRIPT (
+      "send(ObjC.classes.NSDate.$superClass.$className === \"NSObject\");"
+      "send(ObjC.classes.NSObject.$superClass === null);");
   EXPECT_SEND_MESSAGE_WITH ("true");
   EXPECT_SEND_MESSAGE_WITH ("true");
 }
