@@ -24,6 +24,7 @@ function Runtime() {
     let cachedNSNumber = null;
     let cachedNSNumberCtor = null;
     let singularTypeById = null;
+    let modifiers = null;
 
     try {
         tryInitialize();
@@ -2213,6 +2214,8 @@ function Runtime() {
         } else if (id === '^') {
             readType(cursor);
             return singularTypeById['?'];
+        } else if (modifiers.has(id)) {
+            return readType(cursor);
         } else {
             throw new Error("Unable to handle type " + id);
         }
@@ -2514,6 +2517,19 @@ function Runtime() {
     }
 
     const longBits = (pointerSize == 8 && Process.platform !== 'windows') ? 64 : 32;
+
+    modifiers = new Set([
+      'j', // complex
+      'A', // atomic
+      'r', // const
+      'n', // in
+      'N', // inout
+      'o', // out
+      'O', // by copy
+      'R', // by ref
+      'V', // one way
+      '+'  // GNU register
+    ]);
 
     singularTypeById = {
         'c': {
