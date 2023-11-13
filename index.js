@@ -1690,7 +1690,7 @@ function Runtime() {
             let modulePath = modules.findPath(rawName);
             const possiblySwift = (modulePath === null) && (unfiltered || allModules.findPath(rawName) === null);
             if (possiblySwift) {
-                name = rawName.readUtf8String();
+                name = rawName.readCString();
                 const probablySwift = name.indexOf('.') !== -1;
                 if (probablySwift) {
                     const nominalTypeDescriptor = classHandle.add(swiftNominalTypeDescriptorOffset).readPointer();
