@@ -1362,9 +1362,8 @@ function Runtime() {
             const location = this.handle.add(blockOffsets.invoke);
             const prot = Memory.queryProtection(location);
             const writable = prot.includes('w');
-            if (!writable) {
+            if (!writable)
                 Memory.protect(location, Process.pointerSize, 'rw-');
-            }
             location.writePointer(callback.strip().sign('ia', location));
             if (!writable) {
                 Memory.protect(location, Process.pointerSize, prot);
