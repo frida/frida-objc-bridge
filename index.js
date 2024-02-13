@@ -1365,9 +1365,8 @@ function Runtime() {
             if (!writable)
                 Memory.protect(location, Process.pointerSize, 'rw-');
             location.writePointer(callback.strip().sign('ia', location));
-            if (!writable) {
+            if (!writable)
                 Memory.protect(location, Process.pointerSize, prot);
-            }
         }
       },
       declare: {
