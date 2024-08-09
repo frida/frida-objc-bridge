@@ -270,8 +270,11 @@ function Runtime() {
                     numClasses = api.objc_getClassList(classHandles, numClasses);
                     for (let i = 0; i !== numClasses; i++) {
                         const handle = classHandles.add(i * pointerSize).readPointer();
-                        const name = api.class_getName(handle).readUtf8String();
-                        cachedClasses[name] = handle;
+                        try {
+                            const name = api.class_getName(handle).readUtf8String();
+                            cachedClasses[name] = handle;
+                        } catch (e) {
+                        }
                     }
                     numCachedClasses = numClasses;
                 }
@@ -473,8 +476,11 @@ function Runtime() {
             const klass = api.object_getClass(handle);
             const key = klass.toString();
             if (!realizedClasses.has(key)) {
-                api.objc_lookUpClass(api.class_getName(klass));
-                realizedClasses.add(key);
+                try {
+                    api.objc_lookUpClass(api.class_getName(klass));
+                    realizedClasses.add(key);
+                } catch (e) {
+                }
             }
         }
 
@@ -1681,6 +1687,7 @@ function Runtime() {
 
         const classGetName = api.class_getName;
         const onMatch = callbacks.onMatch.bind(callbacks);
+        const onError = callbacks.onError?.bind(callbacks) ?? function(e) { return true; };
         const swiftNominalTypeDescriptorOffset = ((pointerSize === 8) ? 8 : 11) * pointerSize;
 
         const numClasses = api.objc_getClassList(NULL, 0);
@@ -1689,8 +1696,16 @@ function Runtime() {
 
         for (let i = 0; i !== numClasses; i++) {
             const classHandle = classHandles.add(i * pointerSize).readPointer();
-
-            const rawName = classGetName(classHandle);
+            let rawName = null;
+            try {
+                rawName = classGetName(classHandle);
+            } catch (e) {
+                const shouldContinue = onError(e);
+                if (shouldContinue) 
+                    continue;
+                else
+                    break;
+            }
             let name = null;
 
             let modulePath = modules.findPath(rawName);
