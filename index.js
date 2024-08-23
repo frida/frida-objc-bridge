@@ -1694,20 +1694,22 @@ function Runtime() {
             let name = null;
 
             let modulePath = modules.findPath(rawName);
-            const possiblySwift = (modulePath === null) && (unfiltered || allModules.findPath(rawName) === null);
-            if (possiblySwift) {
+            const isSwift5plus = api._class_isSwift(classHandle);
+            if (isSwift5plus) {
                 name = rawName.readCString();
-                const probablySwift = name.indexOf('.') !== -1;
-                if (probablySwift) {
+            }
+            else {
+                const possiblySwiftLegacy = (modulePath === null) && (unfiltered || allModules.findPath(rawName) === null);
+                const swiftName = possiblySwiftLegacy ? rawName.readCString() : null;
+                if (possiblySwiftLegacy && swiftName.indexOf('.') !== -1) {
                     const nominalTypeDescriptor = classHandle.add(swiftNominalTypeDescriptorOffset).readPointer();
                     modulePath = modules.findPath(nominalTypeDescriptor);
+                    name = swiftName;
                 }
             }
 
             if (modulePath !== null) {
-                if (name === null)
-                    name = rawName.readUtf8String();
-                onMatch(name, modulePath);
+                onMatch(name ?? rawName.readUtf8String(), modulePath);
             }
         }
 
