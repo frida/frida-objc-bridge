@@ -271,7 +271,7 @@ function Runtime() {
                     for (let i = 0; i !== numClasses; i++) {
                         const handle = classHandles.add(i * pointerSize).readPointer();
                         const rawName = api.class_getName(handle)
-                        const name = tryDemangleSwift(rawName) ?? rawName.readUtf8String();
+                        const name = tryDemangleSwift(rawName) || rawName.readUtf8String();
                         cachedClasses[name] = handle;
                     }
                     numCachedClasses = numClasses;
@@ -552,7 +552,7 @@ function Runtime() {
                                 rawName = api.class_getName(handle);
                             else
                                 rawName = api.object_getClassName(handle);
-                            cachedClassName = tryDemangleSwift(rawName) ?? rawName.readUtf8String();;
+                            cachedClassName = tryDemangleSwift(rawName) || rawName.readUtf8String();;
                         }
                         return cachedClassName;
                     case "$moduleName":
@@ -1704,12 +1704,12 @@ function Runtime() {
                 if (probablySwift) {
                     const nominalTypeDescriptor = classHandle.add(swiftNominalTypeDescriptorOffset).readPointer();
                     modulePath = modules.findPath(nominalTypeDescriptor);
-                    name ??= swiftName;
+                    name = name || swiftName;
                 }
             }
 
             if (modulePath !== null) {
-                onMatch(name ?? rawName.readUtf8String(), modulePath);
+                onMatch(name || rawName.readUtf8String(), modulePath);
             }
         }
 
