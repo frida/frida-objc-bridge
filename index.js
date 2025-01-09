@@ -2170,6 +2170,9 @@ function Runtime() {
             if (next === '?') {
                 id += next;
                 skipChar(cursor);
+                if (peekChar(cursor) === '<') {
+                    skipExtendedBlock(cursor);
+                }
             } else if (next === '"') {
                 skipChar(cursor);
                 readUntil('"', cursor);
@@ -2225,6 +2228,22 @@ function Runtime() {
         } else {
             throw new Error("Unable to handle type " + id);
         }
+    }
+
+    function skipExtendedBlock(cursor) {
+        let ch;
+        skipChar(cursor); // '<'
+        while ((ch = peekChar(cursor)) !== '>') {
+            if (peekChar(cursor) === '<') {
+                skipExtendedBlock(cursor);
+            } else {
+                skipChar(cursor);
+                if (ch === '"') {
+                    readUntil('"', cursor);
+                }
+            }
+        }
+        skipChar(cursor); // '>'
     }
 
     function readNumber(cursor) {
