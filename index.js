@@ -2238,9 +2238,8 @@ function Runtime() {
                 skipExtendedBlock(cursor);
             } else {
                 skipChar(cursor);
-                if (ch === '"') {
+                if (ch === '"')
                     readUntil('"', cursor);
-                }
             }
         }
         skipChar(cursor); // '>'
