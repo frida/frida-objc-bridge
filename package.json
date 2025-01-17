@@ -1,6 +1,6 @@
 {
   "name": "frida-objc-bridge",
-  "version": "7.0.6",
+  "version": "7.1.0",
   "description": "Objective-C runtime interop from Frida",
   "main": "index.js",
   "files": [
