@@ -16,5 +16,8 @@
   "bugs": {
     "url": "https://github.com/frida/frida-objc-bridge/issues"
   },
-  "homepage": "https://github.com/frida/frida-objc-bridge#readme"
+  "homepage": "https://github.com/frida/frida-objc-bridge#readme",
+  "devDependencies": {
+    "@types/frida-gum": "^18.8.2"
+  }
 }
