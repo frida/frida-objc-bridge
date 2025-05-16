@@ -1,7 +1,7 @@
 /* jshint esnext: true, evil: true */
 
-const {getApi, defaultInvocationOptions} = require('./lib/api');
-const fastpaths = require('./lib/fastpaths');
+import {getApi, defaultInvocationOptions} from './lib/api.js';
+import * as fastpaths from './lib/fastpaths.js';
 
 function Runtime() {
     const pointerSize = Process.pointerSize;
@@ -2719,4 +2719,5 @@ function Runtime() {
     }
 }
 
-module.exports = new Runtime();
+const runtime = new Runtime();
+export default runtime;

@@ -3,6 +3,7 @@
   "version": "7.1.0",
   "description": "Objective-C runtime interop from Frida",
   "main": "index.js",
+  "type":"module",
   "files": [
     "/index.js",
     "/lib/**/*.js"
