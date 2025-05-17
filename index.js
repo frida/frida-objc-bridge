@@ -102,7 +102,7 @@ function Runtime() {
     Object.defineProperty(this, 'mainQueue', {
         enumerable: true,
         get() {
-            return api._dispatch_main_q;
+            return api?._dispatch_main_q ?? null;
         }
     });
 
@@ -262,6 +262,8 @@ function Runtime() {
                 return false;
             },
             ownKeys(target) {
+                if (api === null)
+                    return [];
                 let numClasses = api.objc_getClassList(NULL, 0);
                 if (numClasses !== numCachedClasses) {
                     // It's impossible to unregister classes in ObjC, so if the number of
@@ -361,6 +363,8 @@ function Runtime() {
                 return false;
             },
             ownKeys(target) {
+                if (api === null)
+                    return [];
                 const numProtocolsBuf = Memory.alloc(pointerSize);
                 const protocolHandles = api.objc_copyProtocolList(numProtocolsBuf);
                 try {
