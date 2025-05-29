@@ -1777,6 +1777,8 @@ function Runtime() {
             ? getMsgSendSuperImpl(signature, invocationOptions)
             : getMsgSendImpl(signature, invocationOptions);
 
+        let a = objc_msgSend + ptr("0x0");
+
         const argVariableNames = argTypes.map(function (t, i) {
             return "a" + (i + 1);
         });
