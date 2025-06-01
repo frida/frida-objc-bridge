@@ -19,6 +19,7 @@ function Runtime() {
     let readObjectIsa = null;
     const msgSendBySignatureId = new Map();
     const msgSendSuperBySignatureId = new Map();
+    let markUsed = null;
     let cachedNSString = null;
     let cachedNSStringCtor = null;
     let cachedNSNumber = null;
@@ -1777,8 +1778,9 @@ function Runtime() {
             ? getMsgSendSuperImpl(signature, invocationOptions)
             : getMsgSendImpl(signature, invocationOptions);
 
-        let a = objc_msgSend + ptr("0x0");
-
+        // hack to prevent rollup from dropping objc_msgSend
+        markUsed = objc_msgSend.add("0x0");
+        
         const argVariableNames = argTypes.map(function (t, i) {
             return "a" + (i + 1);
         });
