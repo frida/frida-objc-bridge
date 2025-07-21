@@ -272,7 +272,8 @@ function Runtime() {
                     numClasses = api.objc_getClassList(classHandles, numClasses);
                     for (let i = 0; i !== numClasses; i++) {
                         const handle = classHandles.add(i * pointerSize).readPointer();
-                        const name = api.class_getName(handle).readUtf8String();
+                        const rawName = api.class_getName(handle)
+                        const name = tryDemangleSwift(rawName) || rawName.readUtf8String();
                         cachedClasses[name] = handle;
                     }
                     numCachedClasses = numClasses;
@@ -548,12 +549,14 @@ function Runtime() {
                         return cachedClass;
                     case "$className":
                         if (cachedClassName === null) {
+                            let rawName = null;
                             if (superSpecifier)
-                                cachedClassName = api.class_getName(superSpecifier.add(pointerSize).readPointer()).readUtf8String();
+                                rawName = api.class_getName(superSpecifier.add(pointerSize).readPointer());
                             else if (isClass())
-                                cachedClassName = api.class_getName(handle).readUtf8String();
+                                rawName = api.class_getName(handle);
                             else
-                                cachedClassName = api.object_getClassName(handle).readUtf8String();
+                                rawName = api.object_getClassName(handle);
+                            cachedClassName = tryDemangleSwift(rawName) || rawName.readUtf8String();;
                         }
                         return cachedClassName;
                     case "$moduleName":
@@ -1695,27 +1698,34 @@ function Runtime() {
             const classHandle = classHandles.add(i * pointerSize).readPointer();
 
             const rawName = classGetName(classHandle);
-            let name = null;
+            let name = tryDemangleSwift(rawName);
 
             let modulePath = modules.findPath(rawName);
             const possiblySwift = (modulePath === null) && (unfiltered || allModules.findPath(rawName) === null);
             if (possiblySwift) {
-                name = rawName.readCString();
-                const probablySwift = name.indexOf('.') !== -1;
+                const swiftName = rawName.readCString();
+                const probablySwift = swiftName.indexOf('.') !== -1;
                 if (probablySwift) {
                     const nominalTypeDescriptor = classHandle.add(swiftNominalTypeDescriptorOffset).readPointer();
                     modulePath = modules.findPath(nominalTypeDescriptor);
+                    name = name || swiftName;
                 }
             }
 
             if (modulePath !== null) {
-                if (name === null)
-                    name = rawName.readUtf8String();
-                onMatch(name, modulePath);
+                onMatch(name || rawName.readUtf8String(), modulePath);
             }
         }
 
         callbacks.onComplete();
+    }
+
+    function tryDemangleSwift (symbol) {
+        if (api.swift_demangle === undefined) return null;
+        const demangled = api.swift_demangle(symbol, api._platform_strlen(symbol), ptr(0), 0, 0);
+        const demangledString = demangled !== null ? demangled.readUtf8String() : null;
+        if (demangled !== null) api.free(demangled)
+        return demangledString;
     }
 
     function enumerateLoadedClassesSync(options = {}) {
