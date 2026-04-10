@@ -268,8 +268,11 @@ function Runtime() {
                 if (numClasses !== numCachedClasses) {
                     // It's impossible to unregister classes in ObjC, so if the number of
                     // classes hasn't changed, we can assume that the list is up to date.
-                    const classHandles = Memory.alloc(numClasses * pointerSize);
-                    numClasses = api.objc_getClassList(classHandles, numClasses);
+                    const bufferSize = numClasses;
+                    const classHandles = Memory.alloc(bufferSize * pointerSize);
+                    numClasses = api.objc_getClassList(classHandles, bufferSize);
+                    if (numClasses > bufferSize)
+                        numClasses = bufferSize;
                     for (let i = 0; i !== numClasses; i++) {
                         const handle = classHandles.add(i * pointerSize).readPointer();
                         const name = api.class_getName(handle).readUtf8String();
