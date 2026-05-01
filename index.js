@@ -232,7 +232,7 @@ function Runtime() {
     ]);
 
     function ClassRegistry() {
-        const cachedClasses = {};
+        const cachedClasses = new Map();
         let numCachedClasses = 0;
 
         const registry = new Proxy(this, {
@@ -276,11 +276,11 @@ function Runtime() {
                     for (let i = 0; i !== numClasses; i++) {
                         const handle = classHandles.add(i * pointerSize).readPointer();
                         const name = api.class_getName(handle).readUtf8String();
-                        cachedClasses[name] = handle;
+                        cachedClasses.set(name, handle);
                     }
                     numCachedClasses = numClasses;
                 }
-                return Object.keys(cachedClasses);
+                return Array.from(cachedClasses.keys());
             },
             getOwnPropertyDescriptor(target, property) {
                 return {
@@ -305,12 +305,12 @@ function Runtime() {
         }
 
         function findClass(name) {
-            let handle = cachedClasses[name];
+            let handle = cachedClasses.get(name);
             if (handle === undefined) {
                 handle = api.objc_lookUpClass(Memory.allocUtf8String(name));
                 if (handle.isNull())
                     return null;
-                cachedClasses[name] = handle;
+                cachedClasses.set(name, handle);
                 numCachedClasses++;
             }
 
@@ -336,7 +336,7 @@ function Runtime() {
     }
 
     function ProtocolRegistry() {
-        let cachedProtocols = {};
+        const cachedProtocols = new Map();
         let numCachedProtocols = 0;
 
         const registry = new Proxy(this, {
@@ -373,19 +373,19 @@ function Runtime() {
                 try {
                     const numProtocols = numProtocolsBuf.readUInt();
                     if (numProtocols !== numCachedProtocols) {
-                        cachedProtocols = {};
+                        cachedProtocols.clear();
                         for (let i = 0; i !== numProtocols; i++) {
                             const handle = protocolHandles.add(i * pointerSize).readPointer();
                             const name = api.protocol_getName(handle).readUtf8String();
 
-                            cachedProtocols[name] = handle;
+                            cachedProtocols.set(name, handle);
                         }
                         numCachedProtocols = numProtocols;
                     }
                 } finally {
                     api.free(protocolHandles);
                 }
-                return Object.keys(cachedProtocols);
+                return Array.from(cachedProtocols.keys());
             },
             getOwnPropertyDescriptor(target, property) {
                 return {
@@ -403,12 +403,12 @@ function Runtime() {
         }
 
         function findProtocol(name) {
-            let handle = cachedProtocols[name];
+            let handle = cachedProtocols.get(name);
             if (handle === undefined) {
                 handle = api.objc_getProtocol(Memory.allocUtf8String(name));
                 if (handle.isNull())
                     return null;
-                cachedProtocols[name] = handle;
+                cachedProtocols.set(name, handle);
                 numCachedProtocols++;
             }
 
@@ -417,7 +417,7 @@ function Runtime() {
 
         function toJSON() {
             return Object.keys(registry).reduce(function (r, name) {
-                r[name] = { handle: cachedProtocols[name] };
+                r[name] = { handle: cachedProtocols.get(name) };
                 return r;
             }, {});
         }
@@ -466,7 +466,7 @@ function Runtime() {
         let cachedMethodNames = null;
         let cachedProtocolMethods = null;
         let respondsToSelector = null;
-        const cachedMethods = {};
+        const cachedMethods = new Map();
         let cachedNativeMethodNames = null;
         let cachedOwnMethodNames = null;
         let cachedIvars = null;
@@ -675,14 +675,14 @@ function Runtime() {
                                     jsNames[name] = true;
 
                                     const fullName = fullNamePrefix + nativeName;
-                                    if (cachedMethods[fullName] === undefined) {
+                                    if (!cachedMethods.has(fullName)) {
                                         const details = {
                                             sel: sel,
                                             handle: methodHandle,
                                             wrapper: null
                                         };
-                                        cachedMethods[fullName] = details;
-                                        cachedMethods[name] = details;
+                                        cachedMethods.set(fullName, details);
+                                        cachedMethods.set(name, details);
                                     }
                                 }
                             } finally {
@@ -753,16 +753,16 @@ function Runtime() {
         }
 
         function findMethod(rawName) {
-            let method = cachedMethods[rawName];
+            let method = cachedMethods.get(rawName);
             if (method !== undefined)
                 return method;
 
             const tokens = parseMethodName(rawName);
             const fullName = tokens[2];
 
-            method = cachedMethods[fullName];
+            method = cachedMethods.get(fullName);
             if (method !== undefined) {
-                cachedMethods[rawName] = method;
+                cachedMethods.set(rawName, method);
                 return method;
             }
 
@@ -832,10 +832,10 @@ function Runtime() {
                 }
             }
 
-            cachedMethods[fullName] = method;
-            cachedMethods[rawName] = method;
+            cachedMethods.set(fullName, method);
+            cachedMethods.set(rawName, method);
             if (kind === defaultKind)
-                cachedMethods[jsMethodName(name)] = method;
+                cachedMethods.set(jsMethodName(name), method);
 
             return method;
         }
