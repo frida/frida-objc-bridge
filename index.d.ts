@@ -80,13 +80,15 @@ declare module "frida-objc-bridge" {
 
             /**
              * Instance used for chaining up to super-class method implementations.
+             * `null` for root classes such as `NSObject`.
              */
-            $super: ObjC.Object;
+            $super: ObjC.Object | null;
 
             /**
-             * Super-class of this object's class.
+             * Super-class of this object's class. `null` for root classes such
+             * as `NSObject`.
              */
-            $superClass: ObjC.Object;
+            $superClass: ObjC.Object | null;
 
             /**
              * Class that this object is an instance of.
