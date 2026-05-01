@@ -219,7 +219,7 @@ function Runtime() {
     }
 
     function selectorAsString(sel) {
-        return api.sel_getName(sel).readUtf8String();
+        return api.sel_getName(sel).readCString();
     }
 
     const registryBuiltins = new Set([
@@ -275,7 +275,7 @@ function Runtime() {
                         numClasses = bufferSize;
                     for (let i = 0; i !== numClasses; i++) {
                         const handle = classHandles.add(i * pointerSize).readPointer();
-                        const name = api.class_getName(handle).readUtf8String();
+                        const name = api.class_getName(handle).readCString();
                         cachedClasses.set(name, handle);
                     }
                     numCachedClasses = numClasses;
@@ -376,7 +376,7 @@ function Runtime() {
                         cachedProtocols.clear();
                         for (let i = 0; i !== numProtocols; i++) {
                             const handle = protocolHandles.add(i * pointerSize).readPointer();
-                            const name = api.protocol_getName(handle).readUtf8String();
+                            const name = api.protocol_getName(handle).readCString();
 
                             cachedProtocols.set(name, handle);
                         }
@@ -552,16 +552,16 @@ function Runtime() {
                     case "$className":
                         if (cachedClassName === null) {
                             if (superSpecifier)
-                                cachedClassName = api.class_getName(superSpecifier.add(pointerSize).readPointer()).readUtf8String();
+                                cachedClassName = api.class_getName(superSpecifier.add(pointerSize).readPointer()).readCString();
                             else if (isClass())
-                                cachedClassName = api.class_getName(handle).readUtf8String();
+                                cachedClassName = api.class_getName(handle).readCString();
                             else
-                                cachedClassName = api.object_getClassName(handle).readUtf8String();
+                                cachedClassName = api.object_getClassName(handle).readCString();
                         }
                         return cachedClassName;
                     case "$moduleName":
                         if (cachedModuleName === null) {
-                            cachedModuleName = api.class_getImageName(classHandle()).readUtf8String();
+                            cachedModuleName = api.class_getImageName(classHandle()).readCString();
                         }
                         return cachedModuleName;
                     case "$protocols":
@@ -660,7 +660,7 @@ function Runtime() {
                                 for (let i = 0; i !== numMethods; i++) {
                                     const methodHandle = methodHandles.add(i * pointerSize).readPointer();
                                     const sel = api.method_getName(methodHandle);
-                                    const nativeName = api.sel_getName(sel).readUtf8String();
+                                    const nativeName = api.sel_getName(sel).readCString();
                                     if (nativeNames[nativeName] !== undefined)
                                         continue;
                                     nativeNames[nativeName] = nativeName;
@@ -815,7 +815,7 @@ function Runtime() {
                     if (methodHandle.isNull()) {
                         return null;
                     }
-                    let types = api.method_getTypeEncoding(methodHandle).readUtf8String();
+                    let types = api.method_getTypeEncoding(methodHandle).readCString();
                     if (types === null || types === "") {
                         types = stealTypesFromProtocols(target, fullName);
                         if (types === null)
@@ -989,7 +989,7 @@ function Runtime() {
             for (let i = 0; i !== numMethods; i++) {
                 const methodHandle = methodHandles.add(i * pointerSize).readPointer();
                 const sel = api.method_getName(methodHandle);
-                const nativeName = api.sel_getName(sel).readUtf8String();
+                const nativeName = api.sel_getName(sel).readCString();
                 names.push(prefix + nativeName);
             }
         } finally {
@@ -1013,7 +1013,7 @@ function Runtime() {
         Object.defineProperty(this, 'name', {
             get() {
                 if (cachedName === null)
-                    cachedName = api.protocol_getName(handle).readUtf8String();
+                    cachedName = api.protocol_getName(handle).readCString();
                 return cachedName;
             },
             enumerable: true
@@ -1054,7 +1054,7 @@ function Runtime() {
                             const numProperties = numBuf.readUInt();
                             for (let i = 0; i !== numProperties; i++) {
                                 const propertyHandle = propertyHandles.add(i * pointerSize).readPointer();
-                                const propName = api.property_getName(propertyHandle).readUtf8String();
+                                const propName = api.property_getName(propertyHandle).readCString();
                                 const attributes = {};
                                 const attributeEntries = api.property_copyAttributeList(propertyHandle, numBuf);
                                 if (!attributeEntries.isNull()) {
@@ -1062,8 +1062,8 @@ function Runtime() {
                                         const numAttributeValues = numBuf.readUInt();
                                         for (let j = 0; j !== numAttributeValues; j++) {
                                             const attributeEntry = attributeEntries.add(j * (2 * pointerSize));
-                                            const name = attributeEntry.readPointer().readUtf8String();
-                                            const value = attributeEntry.add(pointerSize).readPointer().readUtf8String();
+                                            const name = attributeEntry.readPointer().readCString();
+                                            const value = attributeEntry.add(pointerSize).readPointer().readCString();
                                             attributes[name] = value;
                                         }
                                     } finally {
@@ -1106,7 +1106,7 @@ function Runtime() {
                 for (let i = 0; i !== numMethodDescValues; i++) {
                     const methodDesc = methodDescValues.add(i * (2 * pointerSize));
                     const name = (spec.instance ? '- ' : '+ ') + selectorAsString(methodDesc.readPointer());
-                    const types = methodDesc.add(pointerSize).readPointer().readUtf8String();
+                    const types = methodDesc.add(pointerSize).readPointer().readCString();
                     methods[name] = {
                         required: spec.required,
                         types: types
@@ -1146,7 +1146,7 @@ function Runtime() {
                 const numIvars = numIvarsBuf.readUInt();
                 for (let i = 0; i !== numIvars; i++) {
                     const handle = ivarHandles.add(i * pointerSize).readPointer();
-                    const name = api.ivar_getName(handle).readUtf8String();
+                    const name = api.ivar_getName(handle).readCString();
                     ivars[name] = [handle, null];
                 }
             } finally {
@@ -1213,7 +1213,7 @@ function Runtime() {
                 const offset = api.ivar_getOffset(ivar).toInt32();
                 const address = instance.handle.add(offset);
 
-                const type = parseType(api.ivar_getTypeEncoding(ivar).readUtf8String());
+                const type = parseType(api.ivar_getTypeEncoding(ivar).readCString());
                 const fromNative = type.fromNative || identityTransform;
                 const toNative = type.toNative || identityTransform;
 
@@ -1713,7 +1713,7 @@ function Runtime() {
 
             if (modulePath !== null) {
                 if (name === null)
-                    name = rawName.readUtf8String();
+                    name = rawName.readCString();
                 onMatch(name, modulePath);
             }
         }
@@ -1769,7 +1769,7 @@ function Runtime() {
             handle = null;
             types = method.types;
         } else {
-            types = api.method_getTypeEncoding(handle).readUtf8String();
+            types = api.method_getTypeEncoding(handle).readCString();
         }
 
         const signature = parseSignature(types);
@@ -2662,7 +2662,7 @@ function Runtime() {
             read: address => address.readPointer(),
             write: (address, value) => { address.writePointer(value); },
             fromNative(h) {
-                return h.readUtf8String();
+                return h.readCString();
             }
         },
         '@': {
