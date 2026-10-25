@@ -1307,6 +1307,8 @@ function Runtime() {
     const BLOCK_HAS_STRET =        (1 << 29);
     const BLOCK_HAS_SIGNATURE =    (1 << 30);
 
+    const BLOCK_ISA_DISCRIMINATOR = 0x6ae1; /* ptrauth_string_discriminator("isa") */
+
     function Block(target, options = defaultInvocationOptions) {
         this._options = options;
 
@@ -1334,7 +1336,8 @@ function Runtime() {
             descriptor.add(blockDescriptorOffsets.size).writeULong(blockDescriptorDeclaredSize);
             descriptor.add(blockDescriptorOffsets.rest).writePointer(typesStr);
 
-            block.add(blockOffsets.isa).writePointer(classRegistry.__NSGlobalBlock__);
+            const isaLocation = block.add(blockOffsets.isa);
+            isaLocation.writePointer(classRegistry.__NSGlobalBlock__.handle.sign('da', isaLocation.blend(BLOCK_ISA_DISCRIMINATOR)));
             block.add(blockOffsets.flags).writeU32(BLOCK_HAS_SIGNATURE | BLOCK_IS_GLOBAL);
             block.add(blockOffsets.reserved).writeU32(0);
             block.add(blockOffsets.descriptor).writePointer(descriptor);
